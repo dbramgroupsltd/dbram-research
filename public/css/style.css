@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  color: #1e293b;
+}
+
+.hero {
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  background-size: cover;
+  background-position: center;
+}
+
+.section {
+  padding: 4rem 0;
+}
+
+.bg-light {
+  background-color: #f8fafc !important;
+}
+
+.card {
+  transition: transform 0.2s;
+}
+.card:hover {
+  transform: translateY(-5px);
+}
+
+.stars {
+  font-size: 1rem;
+  letter-spacing: 2px;
+}
+
+.btn-primary {
+  background-color: #1a56db;
+  border-color: #1a56db;
+}
+.btn-primary:hover {
+  background-color: #1342b5;
+}
+
+a {
+  text-decoration: none;
+}
+
+/* Override Bootstrap navbar to match design */
+.navbar {
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.navbar-brand {
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: #1a56db !important;
+}
+.hero-small {
+  background: linear-gradient(135deg, #1a56db, #0d3b8e);
+  padding: 4rem 0;
+}

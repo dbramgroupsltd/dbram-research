@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard – DBRAM Research</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-partially_paid { background: #fed7aa; color: #9b4c0c; }
+    .status-paid { background: #d1fae5; color: #065f46; }
+    .status-completed { background: #ddd6fe; color: #3730a3; }
+    .badge { font-size: 0.75rem; padding: 0.35em 0.7em; border-radius: 20px; font-weight: 600; }
+    #chatWidget { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; }
+    .chat-toggle { width: 58px; height: 58px; border-radius: 50%; background: #1a56db; border: none; color: #fff; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(26,86,219,0.4); cursor: pointer; transition: transform 0.2s; }
+    .chat-toggle:hover { transform: scale(1.08); }
+    .chat-badge { position: absolute; top: -2px; right: -2px; background: #dc2626; color: #fff; border-radius: 50%; width: 20px; height: 20px; font-size: 0.65rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .chat-box { width: 340px; height: 480px; background: #fff; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.12); border: 1px solid #e2e8f0; display: flex; flex-direction: column; overflow: hidden; position: absolute; bottom: 70px; right: 0; }
+    .chat-header { background: #1a56db; color: #fff; padding: 0.9rem 1rem; display: flex; align-items: center; justify-content: space-between; }
+    .chat-avatar { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+    .chat-status { font-size: 0.72rem; opacity: 0.85; }
+    .chat-messages { flex-grow: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; background: #f8faff; }
+    .chat-welcome { background: #fff; border-radius: 12px; padding: 0.75rem 1rem; color: #64748b; font-size: 0.85rem; text-align: center; border: 1px dashed #cbd5e1; }
+    .chat-msg { display: flex; flex-direction: column; max-width: 85%; }
+    .chat-msg.mine { align-self: flex-end; align-items: flex-end; }
+    .chat-msg.theirs { align-self: flex-start; align-items: flex-start; }
+    .msg-bubble { padding: 0.55rem 0.9rem; border-radius: 14px; font-size: 0.85rem; }
+    .chat-msg.mine .msg-bubble { background: #1a56db; color: #fff; border-bottom-right-radius: 4px; }
+    .chat-msg.theirs .msg-bubble { background: #fff; border: 1px solid #e2e8f0; border-bottom-left-radius: 4px; }
+    .msg-time { font-size: 0.68rem; color: #64748b; margin-top: 0.2rem; }
+    .chat-input-area { padding: 0.75rem; border-top: 1px solid #e2e8f0; display: flex; gap: 0.5rem; background: #fff; }
+    .chat-input { flex-grow: 1; border: 1px solid #e2e8f0; border-radius: 24px; padding: 0.5rem 1rem; font-size: 0.85rem; outline: none; }
+    .chat-input:focus { border-color: #1a56db; }
+    .chat-send { width: 38px; height: 38px; border-radius: 50%; background: #1a56db; border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .chat-send:hover { background: #1342b5; }
+  </style>
+</head>
+<body>
+
+<div id="navbar-placeholder"></div>
+
+<section class="section">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
+      <div><h2 class="fw-bold">Dashboard</h2><p class="text-muted" id="welcomeMsg">Welcome back!</p></div>
+      <div>
+        <button id="deleteAccountBtn" class="btn btn-outline-danger btn-sm me-2"><i class="bi bi-trash3"></i> Delete My Account</button>
+        <button id="logoutBtn" class="btn btn-outline-danger btn-sm"><i class="bi bi-box-arrow-right"></i> Logout</button>
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="row g-3 mb-5">
+      <div class="col-md-3"><div class="card border-0 shadow-sm text-center p-3"><i class="bi bi-file-earmark-text fs-1 text-primary"></i><h4 id="totalOrders">0</h4><small>Total Orders</small></div></div>
+      <div class="col-md-3"><div class="card border-0 shadow-sm text-center p-3"><i class="bi bi-hourglass-split fs-1 text-warning"></i><h4 id="pendingOrders">0</h4><small>Pending Payment</small></div></div>
+      <div class="col-md-3"><div class="card border-0 shadow-sm text-center p-3"><i class="bi bi-pie-chart fs-1 text-info"></i><h4 id="partialOrders">0</h4><small>Partially Paid</small></div></div>
+      <div class="col-md-3"><div class="card border-0 shadow-sm text-center p-3"><i class="bi bi-check-circle fs-1 text-success"></i><h4 id="completedOrders">0</h4><small>Completed/Paid</small></div></div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Order Form -->
+      <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-bold border-0 pt-4 pb-0"><i class="bi bi-plus-circle"></i> New Research Order</div>
+          <div class="card-body">
+            <div id="orderAlert" class="alert d-none"></div>
+            <form id="orderForm">
+              <div class="mb-3"><label class="form-label fw-semibold">Paper Title *</label><input type="text" class="form-control" id="orderTitle" required></div>
+              <div class="mb-3"><label class="form-label fw-semibold">Subject / Field *</label><select class="form-select" id="orderSubject" required><option value="">— Choose subject —</option><option>Computer Science</option><option>Law</option><option>Medicine & Health</option><option>Business & Economics</option><option>Engineering</option><option>Social Sciences</option><option>Humanities</option><option>Education</option><option>Environmental Science</option></select></div>
+              <div class="mb-3"><label class="form-label fw-semibold">Program / Order Type *</label><select class="form-select" id="orderType" required><option value="">— Select —</option><option value="undergraduate">Undergraduate Project</option><option value="masters">Masters Project</option><option value="pgd">PGD Project</option><option value="phd">PhD Project</option><option value="assignment">Assignment</option><option value="term_paper">Term Paper / Article</option></select></div>
+              <div class="mb-3"><label class="form-label fw-semibold">Deadline *</label><input type="date" class="form-control" id="orderDeadline" required></div>
+              <div class="mb-3"><label class="form-label fw-semibold">Pages *</label><input type="number" class="form-control" id="orderPages" min="1" required></div>
+              <div class="mb-4"><label class="form-label fw-semibold">Description / Instructions</label><textarea class="form-control" id="orderDescription" rows="3"></textarea></div>
+              <button type="submit" class="btn btn-primary w-100" id="submitOrderBtn"><span id="orderSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>Submit Order</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Orders List -->
+      <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+          <div class="card-header bg-white fw-bold border-0 pt-4 pb-0"><i class="bi bi-list-ul"></i> Your Orders</div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover mb-0">
+                <thead class="table-light"><tr><th>Title</th><th>Type</th><th>Total (₦)</th><th>Paid (₦)</th><th>Status</th><th>Files</th><th>Action</th></tr></thead>
+                <tbody id="ordersTableBody"><tr><td colspan="7" class="text-center py-4 text-muted">Loading orders...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHAT WIDGET -->
+<div id="chatWidget">
+  <div id="chatToggle" class="chat-toggle" onclick="toggleChat()"><i class="bi bi-chat-dots-fill"></i><span id="chatBadge" class="chat-badge d-none">0</span></div>
+  <div id="chatBox" class="chat-box d-none">
+    <div class="chat-header"><div class="d-flex align-items-center gap-2"><div class="chat-avatar">RP</div><div><strong>Support Team</strong><div class="chat-status">Online</div></div></div><button id="chatClose" class="btn btn-sm btn-link text-white" onclick="toggleChat()">✕</button></div>
+    <div id="chatMessages" class="chat-messages"></div>
+    <div class="chat-input-area"><input type="text" id="chatInput" class="chat-input" placeholder="Type a message..."><button id="chatSend" class="chat-send" onclick="sendChatMessage()"><i class="bi bi-send-fill"></i></button></div>
+  </div>
+</div>
+
+<!-- File Management Modal -->
+<div class="modal fade" id="fileModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Files for Order #<span id="fileOrderId"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="fileList" class="mb-3"></div>
+        <hr>
+        <h6>Upload New File</h6>
+        <form id="fileUploadForm">
+          <input type="hidden" id="uploadOrderId">
+          <div class="mb-2">
+            <input type="file" class="form-control" id="fileInput" required>
+          </div>
+          <div class="mb-2">
+            <input type="text" class="form-control" id="fileDescription" placeholder="Description (optional)">
+          </div>
+          <button type="submit" class="btn btn-primary">Upload File</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="bg-dark text-white-50 py-4 mt-5"><div class="container text-center"><p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Monnify.</p></div></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+  let user = null, chatSocket = null, currentUser = null;
+
+  async function fetchUser() {
+    try { const res = await fetch('/api/me'); if (res.ok) user = await res.json(); else window.location.href = '/login'; return user; } catch(e) { window.location.href = '/login'; }
+  }
+  async function fetchOrders() { const res = await fetch('/api/orders'); const orders = await res.json(); renderOrders(orders); updateStats(orders); }
+  function renderOrders(orders) {
+    const tbody = document.getElementById('ordersTableBody');
+    if (!orders.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No orders yet. Create your first order!</td></tr>'; return; }
+    tbody.innerHTML = orders.map(order => {
+      let actionHtml = '';
+      if (order.status === 'pending') {
+        actionHtml = `<button class="btn btn-sm btn-primary pay-btn me-1" data-id="${order.id}" data-percent="60">Pay 60%</button>
+                      <button class="btn btn-sm btn-outline-success pay-btn" data-id="${order.id}" data-percent="100">Pay Full</button>`;
+      } else if (order.status === 'partially_paid') {
+        const remaining = order.total_amount - order.paid_amount;
+        actionHtml = `<button class="btn btn-sm btn-warning pay-btn" data-id="${order.id}" data-percent="100">Pay Remaining (₦${remaining.toLocaleString()})</button>`;
+      } else { actionHtml = '<span class="badge bg-success">Completed</span>'; }
+      return `<tr>
+        <td class="fw-semibold">${escapeHtml(order.title)}</td>
+        <td>${escapeHtml(order.order_type || '?')}</td>
+        <td>₦${order.total_amount?.toLocaleString() || 0}</td>
+        <td>₦${order.paid_amount?.toLocaleString() || 0}</td>
+        <td><span class="badge status-${order.status}">${order.status}</span></td>
+        <td><button class="btn btn-sm btn-outline-primary view-files-btn" data-order-id="${order.id}"><i class="bi bi-files"></i> Files</button></td>
+        <td>${actionHtml}</td>
+      </tr>`;
+    }).join('');
+    document.querySelectorAll('.pay-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const orderId = btn.dataset.id, percent = btn.dataset.percent;
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+          const res = await fetch(`/api/pay/${orderId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ percentage: percent }) });
+          const data = await res.json();
+          if (data.ok && data.checkoutUrl) window.location.href = data.checkoutUrl;
+          else { alert(data.msg || 'Payment initiation failed.'); btn.disabled = false; btn.innerHTML = percent === '60' ? 'Pay 60%' : 'Pay Full'; }
+        } catch(err) { alert('Network error.'); btn.disabled = false; btn.innerHTML = percent === '60' ? 'Pay 60%' : 'Pay Full'; }
+      });
+    });
+    // File view button
+    document.querySelectorAll('.view-files-btn').forEach(btn => {
+      btn.addEventListener('click', () => openFileModal(btn.dataset.orderId));
+    });
+  }
+  function updateStats(orders) {
+    document.getElementById('totalOrders').innerText = orders.length;
+    document.getElementById('pendingOrders').innerText = orders.filter(o => o.status === 'pending').length;
+    document.getElementById('partialOrders').innerText = orders.filter(o => o.status === 'partially_paid').length;
+    document.getElementById('completedOrders').innerText = orders.filter(o => o.status === 'paid' || o.status === 'completed').length;
+  }
+  document.getElementById('orderForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('orderTitle').value.trim();
+    const subject = document.getElementById('orderSubject').value;
+    const orderType = document.getElementById('orderType').value;
+    const deadline = document.getElementById('orderDeadline').value;
+    const pages = parseInt(document.getElementById('orderPages').value);
+    const description = document.getElementById('orderDescription').value.trim();
+    const alertDiv = document.getElementById('orderAlert');
+    alertDiv.classList.add('d-none');
+    if (!title || !subject || !orderType || !deadline || !pages) {
+      alertDiv.classList.remove('d-none', 'alert-success'); alertDiv.classList.add('alert-danger'); alertDiv.textContent = 'Please fill all required fields.'; return;
+    }
+    const btn = document.getElementById('submitOrderBtn'); const spinner = document.getElementById('orderSpinner');
+    btn.disabled = true; spinner.classList.remove('d-none');
+    try {
+      const res = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, subject, orderType, deadline, pages, description }) });
+      const data = await res.json();
+      if (data.ok) {
+        alertDiv.classList.remove('d-none', 'alert-danger'); alertDiv.classList.add('alert-success'); alertDiv.textContent = 'Order created!';
+        document.getElementById('orderForm').reset();
+        fetchOrders();
+      } else { alertDiv.classList.remove('d-none', 'alert-success'); alertDiv.classList.add('alert-danger'); alertDiv.textContent = data.msg || 'Failed to create order.'; }
+    } catch(err) { alertDiv.classList.remove('d-none', 'alert-success'); alertDiv.classList.add('alert-danger'); alertDiv.textContent = 'Network error.'; }
+    finally { btn.disabled = false; spinner.classList.add('d-none'); }
+  });
+  // Logout
+  document.getElementById('logoutBtn').addEventListener('click', async () => { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; });
+  // Delete account
+  document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
+    if (confirm('⚠️ WARNING: This will permanently delete your account, all orders, and chat messages. This cannot be undone. Continue?')) {
+      try {
+        const res = await fetch('/api/me', { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) {
+          alert('Your account has been deleted. You will be redirected.');
+          window.location.href = '/';
+        } else {
+          alert(data.msg || 'Deletion failed');
+        }
+      } catch (err) {
+        alert('Network error.');
+      }
+    }
+  });
+
+  // ─── FILE MANAGEMENT ─────────────────────────────────────────────────────────
+  async function openFileModal(orderId) {
+    document.getElementById('fileOrderId').textContent = orderId;
+    document.getElementById('uploadOrderId').value = orderId;
+    document.getElementById('fileList').innerHTML = '<div class="text-muted">Loading files...</div>';
+    document.getElementById('fileUploadForm').reset();
+    
+    const modal = new bootstrap.Modal(document.getElementById('fileModal'));
+    modal.show();
+    
+    await loadFiles(orderId);
+  }
+
+  async function loadFiles(orderId) {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/files`);
+      const files = await res.json();
+      const container = document.getElementById('fileList');
+      if (!files.length) {
+        container.innerHTML = '<div class="text-muted">No files uploaded yet.</div>';
+        return;
+      }
+      container.innerHTML = files.map(file => `
+        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+          <div>
+            <i class="bi bi-file-earmark"></i>
+            <strong>${escapeHtml(file.file_name)}</strong>
+            <div class="text-muted small">Uploaded by: ${escapeHtml(file.uploader_name)} (${file.uploader_role})</div>
+            ${file.description ? `<div class="text-muted small">${escapeHtml(file.description)}</div>` : ''}
+          </div>
+          <div>
+            <a href="/api/files/${file.id}/download" class="btn btn-sm btn-outline-primary" target="_blank">
+              <i class="bi bi-download"></i>
+            </a>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      document.getElementById('fileList').innerHTML = '<div class="text-danger">Error loading files.</div>';
+    }
+  }
+
+  // File upload form
+  document.getElementById('fileUploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const orderId = document.getElementById('uploadOrderId').value;
+    const fileInput = document.getElementById('fileInput');
+    const description = document.getElementById('fileDescription').value.trim();
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('description', description);
+
+    try {
+      const res = await fetch(`/api/orders/${orderId}/files`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert('File uploaded successfully!');
+        fileInput.value = '';
+        document.getElementById('fileDescription').value = '';
+        await loadFiles(orderId);
+      } else {
+        alert(data.msg || 'Upload failed');
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  });
+
+  function escapeHtml(str) { return String(str).replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
+
+  // ─── CHAT LOGIC ─────────────────────────────────────────────────────────────
+  function initChat(userData) {
+    if (!userData || chatSocket) return;
+    currentUser = userData;
+    chatSocket = io();
+    chatSocket.emit('join_room', userData.id);
+    loadChatHistory();
+    chatSocket.on('new_message', (msg) => {
+      appendMessage(msg, msg.sender === 'client');
+      const box = document.getElementById('chatBox');
+      if (!box || box.classList.contains('d-none')) {
+        const badge = document.getElementById('chatBadge');
+        if (badge) { let count = parseInt(badge.textContent) || 0; count++; badge.textContent = count > 9 ? '9+' : count; badge.classList.remove('d-none'); }
+      }
+    });
+  }
+  async function loadChatHistory() {
+    try {
+      const res = await fetch('/api/chat/messages');
+      const messages = await res.json();
+      const container = document.getElementById('chatMessages');
+      if (!container) return;
+      container.innerHTML = '';
+      if (!messages.length) container.innerHTML = '<div class="chat-welcome">👋 Hi! How can we help you today?</div>';
+      else messages.forEach(msg => appendMessage(msg, msg.sender === 'client'));
+      container.scrollTop = container.scrollHeight;
+    } catch(err) { console.error(err); }
+  }
+  function appendMessage(msg, isMine) {
+    const container = document.getElementById('chatMessages');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.className = `chat-msg ${isMine ? 'mine' : 'theirs'}`;
+    div.innerHTML = `<div class="msg-bubble">${escapeHtml(msg.body)}</div><div class="msg-time">${new Date(msg.created_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+  function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    const body = input?.value.trim();
+    if (!body || !chatSocket || !currentUser) return;
+    chatSocket.emit('send_message', { body, targetUserId: currentUser.id });
+    input.value = '';
+  }
+  window.toggleChat = function() {
+    const box = document.getElementById('chatBox');
+    if (!box) return;
+    const isOpen = !box.classList.contains('d-none');
+    if (isOpen) box.classList.add('d-none');
+    else { box.classList.remove('d-none'); document.getElementById('chatBadge')?.classList.add('d-none'); loadChatHistory(); }
+  };
+
+  // ─── INIT ────────────────────────────────────────────────────────────────────
+  (async function() {
+    const userData = await fetchUser();
+    if (userData && userData.role === 'client') {
+      document.getElementById('welcomeMsg').innerHTML = `Hello, <strong>${escapeHtml(userData.name)}</strong>`;
+      initChat(userData);
+      await fetchOrders();
+    } else if (userData && userData.role !== 'client') {
+      window.location.href = '/dashboard';
+    }
+  })();
+</script>
+</body>
+</html>

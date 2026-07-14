@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register – DBRAM Research</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div id="navbar-placeholder"></div>
+
+<!-- Register section -->
+<section class="section">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-4 p-md-5">
+            <div class="text-center mb-4">
+              <h2 class="fw-bold">DBRAM Research</h2>
+              <p class="text-muted">Create your free account</p>
+            </div>
+
+            <div id="registerAlert" class="alert d-none"></div>
+
+            <form id="registerForm">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Full Name</label>
+                <input type="text" class="form-control" id="regName" placeholder="John Doe" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Email Address</label>
+                <input type="email" class="form-control" id="regEmail" placeholder="you@example.com" required>
+              </div>
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Password</label>
+                <input type="password" class="form-control" id="regPassword" placeholder="At least 8 characters" required>
+              </div>
+              <button type="submit" class="btn btn-primary w-100" id="registerBtn">
+                <span id="registerSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>
+                Create Account
+              </button>
+            </form>
+
+            <div class="text-center mt-3">
+              <small class="text-muted">Already have an account? <a href="/login">Sign in</a></small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="bg-dark text-white-50 py-4 mt-5">
+  <div class="container text-center">
+    <p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Monnify.</p>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+  const form = document.getElementById('registerForm');
+  const alertDiv = document.getElementById('registerAlert');
+  const btn = document.getElementById('registerBtn');
+  const spinner = document.getElementById('registerSpinner');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('regName').value.trim();
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value.trim();
+
+    alertDiv.classList.add('d-none');
+
+    if (!name || !email || !password) {
+      alertDiv.classList.remove('d-none', 'alert-success');
+      alertDiv.classList.add('alert-danger');
+      alertDiv.textContent = 'All fields are required.';
+      return;
+    }
+
+    if (password.length < 6) {
+      alertDiv.classList.remove('d-none', 'alert-success');
+      alertDiv.classList.add('alert-danger');
+      alertDiv.textContent = 'Password must be at least 6 characters.';
+      return;
+    }
+
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        alertDiv.classList.remove('d-none', 'alert-danger');
+        alertDiv.classList.add('alert-success');
+        alertDiv.textContent = 'Registration successful! Redirecting...';
+        setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
+      } else {
+        alertDiv.classList.remove('d-none', 'alert-success');
+        alertDiv.classList.add('alert-danger');
+        alertDiv.textContent = data.msg || 'Registration failed. Try again.';
+        btn.disabled = false;
+        spinner.classList.add('d-none');
+      }
+    } catch (err) {
+      alertDiv.classList.remove('d-none', 'alert-success');
+      alertDiv.classList.add('alert-danger');
+      alertDiv.textContent = 'Network error. Please try again.';
+      btn.disabled = false;
+      spinner.classList.add('d-none');
+    }
+  });
+</script>
+</body>
+</html>

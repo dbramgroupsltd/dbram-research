@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Support Panel – DBRAM Research</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    .chat-container { background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .chat-sidebar { background: #fcfdff; border-right: 1px solid #eef2f6; height: 65vh; overflow-y: auto; }
+    .chat-thread { padding: 0.9rem 1rem; cursor: pointer; border-bottom: 1px solid #f0f2f5; transition: background 0.15s; }
+    .chat-thread:hover { background: #eef2ff; }
+    .chat-thread.active { background: #e0e7ff; border-left: 4px solid #1a56db; }
+    .thread-avatar { width: 44px; height: 44px; background: #1a56db; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1rem; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; background: #fafcff; display: flex; flex-direction: column; gap: 0.75rem; }
+    .msg-bubble { max-width: 75%; padding: 0.6rem 1rem; border-radius: 18px; font-size: 0.85rem; line-height: 1.4; }
+    .message-client { background: white; border: 1px solid #e2e8f0; border-bottom-left-radius: 4px; align-self: flex-start; }
+    .message-support { background: #1a56db; color: white; border-bottom-right-radius: 4px; align-self: flex-end; }
+    .msg-time { font-size: 0.65rem; margin-top: 0.25rem; color: #6c757d; }
+    .chat-input-group { border-top: 1px solid #eef2f6; padding: 0.75rem; background: white; display: flex; gap: 0.5rem; }
+    #replyInput { flex: 1; border-radius: 30px; border: 1px solid #cbd5e1; padding: 0.6rem 1rem; }
+    #sendReply { background: #1a56db; border: none; border-radius: 40px; padding: 0 1.2rem; color: white; font-weight: 500; }
+  </style>
+</head>
+<body>
+<div id="navbar-placeholder"></div>
+<section class="section">
+  <div class="container">
+    <h2 class="fw-bold mb-4">Customer Support</h2>
+    <div class="row g-0 chat-container">
+      <div class="col-md-4 chat-sidebar p-0">
+        <div class="p-3 border-bottom bg-white fw-semibold"><i class="bi bi-people me-2"></i>Client Threads</div>
+        <div id="threadList"><div class="text-center p-3 text-muted">Loading clients...</div></div>
+      </div>
+      <div class="col-md-8 d-flex flex-column">
+        <div class="bg-white border-bottom p-3 fw-semibold" id="selectedClientName"><i class="bi bi-chat-text me-2"></i>Select a client to start chatting</div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div class="chat-input-group">
+          <input type="text" id="replyInput" class="form-control" placeholder="Type your reply..." disabled>
+          <button id="sendReply" class="btn btn-primary" disabled>Send <i class="bi bi-send"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+  let socket = io();
+  let currentUserId = null;
+
+  async function loadThreads() {
+    try {
+      const res = await fetch('/api/chat/threads');
+      const threads = await res.json();
+      const container = document.getElementById('threadList');
+      if (!threads.length) {
+        container.innerHTML = '<div class="text-center p-3 text-muted">No clients have messaged yet.</div>';
+        return;
+      }
+      container.innerHTML = threads.map(thread => `
+        <div class="chat-thread" data-id="${thread.id}" data-name="${escapeHtml(thread.name)}">
+          <div class="d-flex gap-3 align-items-center">
+            <div class="thread-avatar">${thread.name?.charAt(0) || 'C'}</div>
+            <div>
+              <div class="fw-semibold">${escapeHtml(thread.name)}</div>
+              <small class="text-muted">${thread.msg_count} messages</small>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      document.querySelectorAll('.chat-thread').forEach(el => {
+        el.addEventListener('click', () => {
+          const id = parseInt(el.dataset.id);
+          const name = el.dataset.name;
+          openChat(id, name);
+          document.querySelectorAll('.chat-thread').forEach(t => t.classList.remove('active'));
+          el.classList.add('active');
+        });
+      });
+    } catch(err) { console.error(err); }
+  }
+
+  async function openChat(userId, userName) {
+    currentUserId = userId;
+    document.getElementById('selectedClientName').innerHTML = `<i class="bi bi-person-circle me-2"></i>Chat with ${escapeHtml(userName)}`;
+    const input = document.getElementById('replyInput');
+    const sendBtn = document.getElementById('sendReply');
+    input.disabled = false;
+    sendBtn.disabled = false;
+    socket.emit('join_room', userId);
+
+    const res = await fetch(`/api/chat/messages?userId=${userId}`);
+    const messages = await res.json();
+    const container = document.getElementById('chatMessages');
+    container.innerHTML = '';
+    if (!messages.length) container.innerHTML = '<div class="text-center text-muted">No messages yet. Start the conversation.</div>';
+    else messages.forEach(msg => appendMessage(msg, msg.sender === 'support'));
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function appendMessage(msg, isSupport) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = `msg-bubble ${isSupport ? 'message-support' : 'message-client'}`;
+    div.innerHTML = `<div>${escapeHtml(msg.body)}</div><div class="msg-time">${new Date(msg.created_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function sendReply() {
+    const input = document.getElementById('replyInput');
+    const body = input.value.trim();
+    if (!body || !currentUserId) return;
+    socket.emit('send_message', { body, targetUserId: currentUserId });
+    input.value = '';
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>]/g, function(m) {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  }
+
+  socket.on('new_message', (msg) => {
+    if (msg.user_id === currentUserId) {
+      appendMessage(msg, msg.sender === 'support');
+    }
+  });
+
+  document.getElementById('sendReply').addEventListener('click', sendReply);
+  document.getElementById('replyInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendReply(); });
+
+  loadThreads();
+</script>
+</body>
+</html>

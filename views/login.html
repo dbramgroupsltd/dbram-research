@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login – DBRAM Research</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div id="navbar-placeholder"></div>
+
+<section class="section">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-4 p-md-5">
+            <div class="text-center mb-4">
+              <h2 class="fw-bold">DBRAM Research</h2>
+              <p class="text-muted">Professional Research Writing Services</p>
+            </div>
+
+            <div id="loginAlert" class="alert d-none"></div>
+
+            <form id="loginForm">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Email Address</label>
+                <input type="email" class="form-control" id="loginEmail" placeholder="you@example.com" required>
+              </div>
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Password</label>
+                <input type="password" class="form-control" id="loginPassword" placeholder="Enter your password" required>
+              </div>
+              <button type="submit" class="btn btn-primary w-100" id="loginBtn">
+                <span id="loginSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>
+                Sign In
+              </button>
+            </form>
+
+            <div class="text-center mt-3">
+              <small class="text-muted">Don't have an account? <a href="/register">Create one free</a></small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="bg-dark text-white-50 py-4 mt-5">
+  <div class="container text-center">
+    <p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Monnify.</p>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+  const form = document.getElementById('loginForm');
+  const alertDiv = document.getElementById('loginAlert');
+  const btn = document.getElementById('loginBtn');
+  const spinner = document.getElementById('loginSpinner');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value.trim();
+
+    alertDiv.classList.add('d-none');
+
+    if (!email || !password) {
+      alertDiv.classList.remove('d-none', 'alert-success');
+      alertDiv.classList.add('alert-danger');
+      alertDiv.textContent = 'Both email and password are required.';
+      return;
+    }
+
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        alertDiv.classList.remove('d-none', 'alert-danger');
+        alertDiv.classList.add('alert-success');
+        alertDiv.textContent = 'Login successful! Redirecting...';
+        // Use the redirect URL from the server
+        window.location.href = data.redirect;
+      } else {
+        alertDiv.classList.remove('d-none', 'alert-success');
+        alertDiv.classList.add('alert-danger');
+        alertDiv.textContent = data.msg || 'Invalid email or password.';
+        btn.disabled = false;
+        spinner.classList.add('d-none');
+      }
+    } catch (err) {
+      alertDiv.classList.remove('d-none', 'alert-success');
+      alertDiv.classList.add('alert-danger');
+      alertDiv.textContent = 'Network error. Please try again.';
+      btn.disabled = false;
+      spinner.classList.add('d-none');
+    }
+  });
+</script>
+</body>
+</html>
