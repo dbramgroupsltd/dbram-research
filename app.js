@@ -1,4 +1,8 @@
 'use strict';
+// Force IPv4 for SMTP connections
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // Optional, but helps with some IPv6 issues
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 require('dotenv').config();
 
 const http        = require('http');
@@ -178,8 +182,9 @@ const transporter = nodemailer.createTransport({
   },
   socketTimeout: 30000,
   connectionTimeout: 30000,
-  family: 4,               // Force IPv4
+  family: 4,
 });
+
 
 // Verify transporter connection (optional, prints success/failure)
 transporter.verify((error, success) => {
