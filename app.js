@@ -178,6 +178,32 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Verify transporter connection (optional, prints success/failure)
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('⚠️ Email transporter error:', error);
+  } else {
+    console.log('✅ Email transporter is ready');
+  }
+});
+
+// ─── EMAIL HELPER FUNCTION ──────────────────────────────────────────────────
+async function sendEmail(to, subject, html) {
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM,
+      to,
+      subject,
+      html,
+    });
+    console.log(`📧 Email sent to ${to}`);
+    return true;
+  } catch (err) {
+    console.error(`❌ Email failed to ${to}:`, err.message);
+    return false;
+  }
+}
+
 // ─── EXPRESS APP ─────────────────────────────────────────────────────────────
 const app    = express();
 const server = http.createServer(app);
@@ -264,21 +290,16 @@ app.post('/api/register', async (req, res) => {
   req.session.email  = email;
   req.session.role   = 'client';
 
+  // Send welcome email (async, non-blocking)
   (async () => {
-    try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM,
-        to: email,
-        subject: 'Welcome to DBRAM Research',
-        html: `<h2>Hello ${name},</h2>
-               <p>Thank you for registering with DBRAM Research.</p>
-               <p>You can now <a href="${process.env.APP_BASE_URL}/login">log in</a> and start placing orders.</p>
-               <p>Best regards,<br>DBRAM Research Team</p>`
-      });
-      console.log(`Welcome email sent to ${email}`);
-    } catch (emailErr) {
-      console.error('Email sending failed:', emailErr.message);
-    }
+    await sendEmail(
+      email,
+      'Welcome to DBRAM Research',
+      `<h2>Hello ${name},</h2>
+       <p>Thank you for registering with DBRAM Research.</p>
+       <p>You can now <a href="${process.env.APP_BASE_URL}/login">log in</a> and start placing orders.</p>
+       <p>Best regards,<br>DBRAM Research Team</p>`
+    );
   })();
 
   res.json({ ok: true });
@@ -365,13 +386,29 @@ app.get('/api/orders', requireLogin, (req, res) => {
   res.json(orders);
 });
 
-app.patch('/api/orders/:id/status', requireLogin, (req, res) => {
+app.patch('/api/orders/:id/status', requireLogin, async (req, res) => {
   const { status } = req.body;
   const orderId = req.params.id;
   const role = req.session.role;
 
+  // Permission check
   if (role === 'admin') {
     db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, orderId);
+    // If status is 'completed', notify client
+    if (status === 'completed') {
+      const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+      const user = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+      if (user && user.email) {
+        await sendEmail(
+          user.email,
+          'Order Completed – Order #' + order.id,
+          `<h2>Your Order is Complete</h2>
+           <p>Your order "${order.title}" has been marked as completed.</p>
+           <p>You can now download the final file from your dashboard.</p>
+           <p>Thank you for using DBRAM Research.</p>`
+        );
+      }
+    }
     return res.json({ ok: true });
   }
   if (role === 'writer' && (status === 'in_progress' || status === 'completed')) {
@@ -444,13 +481,37 @@ app.get('/payment/verify', async (req, res) => {
     const txn = await verifyMonnifyPayment(ref);
     if (txn && txn.paymentStatus === 'PAID') {
       const pending = global.pendingPayments?.get(ref);
+      let orderId, newStatus;
       if (pending) {
-        const order = db.prepare('SELECT * FROM orders WHERE id=?').get(pending.orderId);
+        orderId = pending.orderId;
+        newStatus = pending.newStatus;
+        const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
         const newPaidAmount = order.paid_amount + pending.amountToPay;
-        db.prepare('UPDATE orders SET paid_amount=?, status=? WHERE id=?').run(newPaidAmount, pending.newStatus, pending.orderId);
+        db.prepare('UPDATE orders SET paid_amount=?, status=? WHERE id=?').run(newPaidAmount, newStatus, orderId);
         global.pendingPayments.delete(ref);
       } else {
-        db.prepare("UPDATE orders SET status='paid' WHERE payment_ref=?").run(ref);
+        // fallback: mark as paid
+        const order = db.prepare('SELECT * FROM orders WHERE payment_ref=?').get(ref);
+        if (order) {
+          orderId = order.id;
+          newStatus = 'paid';
+          db.prepare("UPDATE orders SET status='paid' WHERE payment_ref=?").run(ref);
+        }
+      }
+      // Send payment confirmation email to client
+      if (orderId) {
+        const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+        const user = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+        if (user && user.email) {
+          await sendEmail(
+            user.email,
+            'Payment Confirmation – Order #' + order.id,
+            `<h2>Payment Received</h2>
+             <p>Your payment for order "${order.title}" has been confirmed.</p>
+             <p>Total paid: ₦${order.total_amount}</p>
+             <p>We'll begin working on your order shortly.</p>`
+          );
+        }
       }
       return res.redirect('/dashboard?payment=success');
     }
@@ -461,18 +522,41 @@ app.get('/payment/verify', async (req, res) => {
   }
 });
 
-app.post('/webhook/monnify', express.json(), (req, res) => {
+app.post('/webhook/monnify', express.json(), async (req, res) => {
   const body = req.body;
   if (body?.eventData?.paymentStatus === 'PAID') {
     const ref = body.eventData.paymentReference;
     const pending = global.pendingPayments?.get(ref);
+    let orderId, newStatus;
     if (pending) {
-      const order = db.prepare('SELECT * FROM orders WHERE id=?').get(pending.orderId);
+      orderId = pending.orderId;
+      newStatus = pending.newStatus;
+      const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
       const newPaidAmount = order.paid_amount + pending.amountToPay;
-      db.prepare('UPDATE orders SET paid_amount=?, status=? WHERE id=?').run(newPaidAmount, pending.newStatus, pending.orderId);
+      db.prepare('UPDATE orders SET paid_amount=?, status=? WHERE id=?').run(newPaidAmount, newStatus, orderId);
       global.pendingPayments.delete(ref);
     } else {
-      db.prepare("UPDATE orders SET status='paid' WHERE payment_ref=?").run(ref);
+      const order = db.prepare('SELECT * FROM orders WHERE payment_ref=?').get(ref);
+      if (order) {
+        orderId = order.id;
+        newStatus = 'paid';
+        db.prepare("UPDATE orders SET status='paid' WHERE payment_ref=?").run(ref);
+      }
+    }
+    // Send payment confirmation email to client via webhook
+    if (orderId) {
+      const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+      const user = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+      if (user && user.email) {
+        await sendEmail(
+          user.email,
+          'Payment Confirmation – Order #' + order.id,
+          `<h2>Payment Received</h2>
+           <p>Your payment for order "${order.title}" has been confirmed.</p>
+           <p>Total paid: ₦${order.total_amount}</p>
+           <p>We'll begin working on your order shortly.</p>`
+        );
+      }
     }
     console.log(`Webhook: order updated for ref ${ref}`);
   }
@@ -480,16 +564,23 @@ app.post('/webhook/monnify', express.json(), (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ROUTES – CHAT (admin & support only)
+// ROUTES – CHAT (including client history access)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 app.get('/api/chat/messages', requireLogin, (req, res) => {
-  if (req.session.role !== 'admin' && req.session.role !== 'support') {
-    return res.status(403).json({ error: 'Unauthorized' });
+  const role = req.session.role;
+  const userId = req.session.userId;
+  let targetUserId = req.query.userId;
+
+  // If admin or support, they can view any user's messages (or if no target, return empty)
+  if (role === 'admin' || role === 'support') {
+    if (!targetUserId) return res.json([]);
+  } else {
+    // Client can only view their own messages
+    targetUserId = userId;
   }
-  const userId = req.query.userId;
-  if (!userId) return res.json([]);
-  const rows = db.prepare('SELECT * FROM messages WHERE user_id=? ORDER BY created_at ASC').all(userId);
+
+  const rows = db.prepare('SELECT * FROM messages WHERE user_id=? ORDER BY created_at ASC').all(targetUserId);
   res.json(rows);
 });
 
@@ -545,7 +636,7 @@ app.get('/api/admin/writer-applications', requireLogin, requireAdmin, (req, res)
   res.json(apps);
 });
 
-app.post('/api/admin/writer-applications/:id/review', requireLogin, requireAdmin, (req, res) => {
+app.post('/api/admin/writer-applications/:id/review', requireLogin, requireAdmin, async (req, res) => {
   const { status } = req.body;
   const appId = req.params.id;
   const reviewerId = req.session.userId;
@@ -572,27 +663,20 @@ app.post('/api/admin/writer-applications/:id/review', requireLogin, requireAdmin
         VALUES (?, ?, ?, 'writer')
       `).run(app.name, app.email, hash);
 
-      (async () => {
-        try {
-          await transporter.sendMail({
-            from: process.env.EMAIL_FROM,
-            to: app.email,
-            subject: 'Welcome to DBRAM Research – Writer Account Created',
-            html: `<h2>Hello ${app.name},</h2>
-                   <p>Your writer application has been <strong>approved</strong>!</p>
-                   <p><strong>Your login credentials:</strong><br>
-                   Email: ${app.email}<br>
-                   Password: ${tempPassword}</p>
-                   <p><a href="${process.env.APP_BASE_URL}/writer">Click here to log in</a></p>
-                   <p>After logging in, please change your password.</p>
-                   <br>
-                   <p>Best regards,<br>DBRAM Research Team</p>`
-          });
-          console.log(`Writer account created for ${app.email}`);
-        } catch (emailErr) {
-          console.error('Email sending failed:', emailErr.message);
-        }
-      })();
+      // Send email to writer with credentials
+      await sendEmail(
+        app.email,
+        'Welcome to DBRAM Research – Writer Account Created',
+        `<h2>Hello ${app.name},</h2>
+         <p>Your writer application has been <strong>approved</strong>!</p>
+         <p><strong>Your login credentials:</strong><br>
+         Email: ${app.email}<br>
+         Password: ${tempPassword}</p>
+         <p><a href="${process.env.APP_BASE_URL}/writer">Click here to log in</a></p>
+         <p>After logging in, please change your password.</p>
+         <br>
+         <p>Best regards,<br>DBRAM Research Team</p>`
+      );
     }
 
     res.json({ ok: true, msg: `Application ${status}.` });
@@ -602,7 +686,7 @@ app.post('/api/admin/writer-applications/:id/review', requireLogin, requireAdmin
   }
 });
 
-app.post('/api/admin/assign-order', requireLogin, requireAdmin, (req, res) => {
+app.post('/api/admin/assign-order', requireLogin, requireAdmin, async (req, res) => {
   const { orderId, writerId } = req.body;
   if (!orderId || !writerId) {
     return res.json({ ok: false, msg: 'Order and writer are required.' });
@@ -619,6 +703,19 @@ app.post('/api/admin/assign-order', requireLogin, requireAdmin, (req, res) => {
       INSERT INTO writer_assignments (order_id, writer_id, status)
       VALUES (?, ?, 'assigned')
     `).run(orderId, writerId);
+
+    // Send email to writer
+    const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+    const writerUser = db.prepare('SELECT * FROM users WHERE id=?').get(writerId);
+    if (writerUser && writerUser.email) {
+      await sendEmail(
+        writerUser.email,
+        'New Order Assigned – Order #' + order.id,
+        `<h2>New Assignment</h2>
+         <p>You have been assigned to work on order: "${order.title}".</p>
+         <p>Please log in to your <a href="${process.env.APP_BASE_URL}/writer">writer dashboard</a> to view details.</p>`
+      );
+    }
 
     res.json({ ok: true, msg: 'Order assigned to writer.' });
   } catch (err) {
@@ -680,6 +777,29 @@ app.post('/api/writer/jobs/:id/upload', requireLogin, upload.single('file'), asy
       WHERE id = ?
     `).run(req.file.path, req.file.originalname, jobId);
 
+    // Notify client and admin
+    const order = db.prepare('SELECT * FROM orders WHERE id=?').get(job.order_id);
+    const client = db.prepare('SELECT * FROM users WHERE id=?').get(order.user_id);
+    const admin = db.prepare('SELECT * FROM users WHERE role = "admin" LIMIT 1').get();
+
+    if (client && client.email) {
+      await sendEmail(
+        client.email,
+        'File Uploaded for Your Order #' + order.id,
+        `<h2>Writer Has Submitted a File</h2>
+         <p>The writer has uploaded a file for your order: "${order.title}".</p>
+         <p>Log in to your dashboard to view the file.</p>`
+      );
+    }
+    if (admin && admin.email) {
+      await sendEmail(
+        admin.email,
+        'Writer Submitted File for Order #' + order.id,
+        `<h2>File Uploaded</h2>
+         <p>Writer has uploaded a file for order "${order.title}" by client ${client?.name || 'Unknown'}.</p>`
+      );
+    }
+
     res.json({ ok: true, msg: 'File uploaded successfully!', file: req.file.originalname });
   } catch (err) {
     console.error(err);
@@ -712,7 +832,7 @@ app.get('/api/admin/download/:assignmentId', requireLogin, requireAdmin, (req, r
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ROUTES – FILE MANAGEMENT
+// ROUTES – FILE MANAGEMENT (Client/Writer/Admin)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 app.post('/api/orders/:orderId/files', requireLogin, upload.single('file'), async (req, res) => {
@@ -871,25 +991,17 @@ app.post('/api/admin/users', requireLogin, requireAdmin, async (req, res) => {
   try {
     db.prepare('INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)').run(name, email, hash, role);
 
-    (async () => {
-      try {
-        await transporter.sendMail({
-          from: process.env.EMAIL_FROM,
-          to: email,
-          subject: `Your ${role} account on DBRAM Research`,
-          html: `<h2>Hello ${name},</h2>
-                 <p>An admin has created a ${role} account for you on DBRAM Research.</p>
-                 <p><strong>Your login credentials:</strong><br>
-                 Email: ${email}<br>
-                 Password: ${password}</p>
-                 <p><a href="${process.env.APP_BASE_URL}/login">Click here to log in</a></p>
-                 <p>Best regards,<br>DBRAM Research Team</p>`
-        });
-        console.log(`Welcome email sent to ${email}`);
-      } catch (emailErr) {
-        console.error('Email sending failed:', emailErr.message);
-      }
-    })();
+    await sendEmail(
+      email,
+      `Your ${role} account on DBRAM Research`,
+      `<h2>Hello ${name},</h2>
+       <p>An admin has created a ${role} account for you on DBRAM Research.</p>
+       <p><strong>Your login credentials:</strong><br>
+       Email: ${email}<br>
+       Password: ${password}</p>
+       <p><a href="${process.env.APP_BASE_URL}/login">Click here to log in</a></p>
+       <p>Best regards,<br>DBRAM Research Team</p>`
+    );
 
     res.json({ ok: true, msg: `User ${email} (${role}) created successfully.` });
   } catch (err) {
@@ -945,8 +1057,7 @@ io.on('connection', (socket) => {
   socket.on('send_message', ({ body, targetUserId }) => {
     const roomUserId = (role === 'admin' || role === 'support') ? targetUserId : userId;
     if (!body?.trim()) return;
-    let sender = 'client';
-    if (role === 'admin' || role === 'support') sender = 'support';
+    const sender = (role === 'admin' || role === 'support') ? 'support' : 'client';
     const stmt = db.prepare('INSERT INTO messages (user_id,sender,body) VALUES (?,?,?)');
     const result = stmt.run(roomUserId, sender, body.trim());
     const msg = db.prepare('SELECT * FROM messages WHERE id=?').get(result.lastInsertRowid);
