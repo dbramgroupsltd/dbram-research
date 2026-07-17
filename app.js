@@ -1065,6 +1065,19 @@ io.on('connection', (socket) => {
   });
 });
 
+app.get('/test-email', async (req, res) => {
+  try {
+    await sendEmail(
+      'dbramgroupsltd@gmail.com',
+      'Test Email from DBRAM Research',
+      '<p>If you receive this, email is working! 🎉</p>'
+    );
+    res.send('✅ Test email sent! Check your inbox.');
+  } catch (err) {
+    res.send('❌ Email failed: ' + err.message);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // START SERVER
 // ═══════════════════════════════════════════════════════════════════════════════
