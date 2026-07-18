@@ -183,9 +183,9 @@ async function sendEmail(to, subject, html) {
   try {
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
-      email: 'dbramgroupsltd@gmail.com', // Use your email
-      name: 'DBRAM Research'
-    };
+  email: 'info@dbramglobal.com', // or support@dbramglobal.com
+  name: 'DBRAM Research'
+  };
     sendSmtpEmail.to = [{ email: to }];
     sendSmtpEmail.subject = subject;
     sendSmtpEmail.htmlContent = html;
