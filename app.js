@@ -200,31 +200,9 @@ async function sendEmail(to, subject, html) {
 }
 
 
-// Verify transporter connection (optional, prints success/failure)
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('⚠️ Email transporter error:', error);
-  } else {
-    console.log('✅ Email transporter is ready');
-  }
-});
 
-// ─── EMAIL HELPER FUNCTION ──────────────────────────────────────────────────
-async function sendEmail(to, subject, html) {
-  try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
-      to,
-      subject,
-      html,
-    });
-    console.log(`📧 Email sent to ${to}`);
-    return true;
-  } catch (err) {
-    console.error(`❌ Email failed to ${to}:`, err.message);
-    return false;
-  }
-}
+
+
 
 // ─── EXPRESS APP ─────────────────────────────────────────────────────────────
 const app    = express();
