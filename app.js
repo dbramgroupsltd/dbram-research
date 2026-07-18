@@ -17,6 +17,7 @@ const axios       = require('axios');
 const nodemailer  = require('nodemailer');
 const multer      = require('multer');
 const fs          = require('fs');
+const SibApiV3Sdk = require('sib-api-v3-sdk');
 
 const { DatabaseSync } = require('node:sqlite');
 const db = new DatabaseSync(path.join(__dirname, 'data.db'));
@@ -172,18 +173,31 @@ if (!supportExists) {
 }
 
 // ─── EMAIL TRANSPORTER ───────────────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-  host: '54.217.107.71',  // Brevo SMTP IP (bypasses DNS)
-  port: parseInt(process.env.EMAIL_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER || 'b26711001@smtp-brevo.com',
-    pass: process.env.EMAIL_PASS,
-  },
-  socketTimeout: 30000,
-  connectionTimeout: 30000,
-  family: 4,
-});
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = defaultClient.authentications['api-key'];
+apiKey.apiKey = process.env.BREVO_API_KEY;
+
+const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+
+async function sendEmail(to, subject, html) {
+  try {
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.sender = {
+      email: 'dbramgroupsltd@gmail.com', // Use your email
+      name: 'DBRAM Research'
+    };
+    sendSmtpEmail.to = [{ email: to }];
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
+
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log(`📧 Email sent to ${to}`);
+    return true;
+  } catch (err) {
+    console.error('❌ Email failed:', err.message);
+    return false;
+  }
+}
 
 
 // Verify transporter connection (optional, prints success/failure)
