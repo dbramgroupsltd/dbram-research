@@ -173,11 +173,11 @@ if (!supportExists) {
 
 // ─── EMAIL TRANSPORTER ───────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT),
+  host: '54.217.107.71',  // Brevo SMTP IP (bypasses DNS)
+  port: parseInt(process.env.EMAIL_PORT) || 587,
   secure: false,
   auth: {
-    user: process.env.EMAIL_USER,
+    user: process.env.EMAIL_USER || 'b26711001@smtp-brevo.com',
     pass: process.env.EMAIL_PASS,
   },
   socketTimeout: 30000,
