@@ -81,61 +81,21 @@
   </div>
 </section>
 
-<!-- Client Reviews – clean cards -->
-<section class="section bg-light">
-  <div class="container">
-    <h2 class="text-center mb-5">What Our Clients Say</h2>
-    <div class="row">
-      <div class="col-md-4 mb-4">
-        <div class="card h-100 border-0 shadow-sm p-3">
-          <div class="stars text-warning mb-2">★★★★★</div>
-          <p class="text-muted">"Excellent research, proper APA citations. Will definitely order again."</p>
-          <div class="mt-auto"><strong>Amaka O.</strong><br><small class="text-muted">MBA Student, Lagos</small></div>
-        </div>
-      </div>
-      <div class="col-md-4 mb-4">
-        <div class="card h-100 border-0 shadow-sm p-3">
-          <div class="stars text-warning mb-2">★★★★★</div>
-          <p class="text-muted">"Live chat support is amazing. Got a reply at midnight. Very professional."</p>
-          <div class="mt-auto"><strong>Chukwuemeka B.</strong><br><small class="text-muted">Law Student, Abuja</small></div>
-        </div>
-      </div>
-      <div class="col-md-4 mb-4">
-        <div class="card h-100 border-0 shadow-sm p-3">
-          <div class="stars text-warning mb-2">★★★★★</div>
-          <p class="text-muted">"Monnify payment seamless. 20 pages delivered in 4 days, Harvard referencing perfect."</p>
-          <div class="mt-auto"><strong>Fatimah K.</strong><br><small class="text-muted">PhD Candidate, Kano</small></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- CTA -->
-<section class="cta py-5 text-center text-white" style="background: #1a56db;">
-  <div class="container">
-    <h3>Ready to Get Started?</h3>
-    <p class="mb-4">Create your free account in under a minute.</p>
-    <a href="/register" class="btn btn-light btn-lg">Create Free Account</a>
-    <a href="/contact" class="btn btn-outline-light btn-lg ms-2">Contact Us</a>
-  </div>
-</section>
 
 <!-- ════════════════════════════════════════════════════════════════════════ -->
 <!-- TESTIMONIALS / REVIEWS SECTION                                        -->
 <!-- ════════════════════════════════════════════════════════════════════════ -->
-<section class="section bg-light">
+<section class="section bg-light" id="reviews-section">
   <div class="container">
     <div class="text-center mb-5">
-      <div class="section-label">What Our Clients Say</div>
-      <h2 class="section-title">Client Reviews</h2>
-      <p class="section-sub">Real feedback from real clients</p>
+      <h2 class="fw-bold" style="font-size:2.2rem;">What Our Clients Say</h2>
+      <p class="text-muted" style="font-size:1.1rem;">Real feedback from real clients</p>
     </div>
 
     <!-- Reviews Carousel -->
-    <div id="reviewsCarousel" class="reviews-carousel">
+    <div class="reviews-carousel">
       <div class="reviews-track" id="reviewsTrack">
-        <div class="text-center py-5 text-muted">Loading reviews...</div>
+        <div class="text-center py-5 text-muted" style="font-size:1.1rem;">Loading reviews...</div>
       </div>
     </div>
 
@@ -144,20 +104,20 @@
       <div class="col-lg-6">
         <div class="card border-0 shadow-sm">
           <div class="card-body p-4">
-            <h5 class="fw-bold mb-3">Leave a Review</h5>
+            <h5 class="fw-bold mb-3" style="font-size:1.2rem;">Leave a Review</h5>
             <div id="reviewAlert" class="alert d-none"></div>
             <form id="reviewForm">
               <div class="mb-3">
-                <label class="form-label fw-semibold">Your Name *</label>
-                <input type="text" class="form-control" id="reviewName" required>
+                <label class="form-label fw-semibold" style="font-size:1rem;">Your Name *</label>
+                <input type="text" class="form-control" id="reviewName" style="font-size:1rem;" required>
               </div>
               <div class="mb-3">
-                <label class="form-label fw-semibold">Email (optional)</label>
-                <input type="email" class="form-control" id="reviewEmail">
+                <label class="form-label fw-semibold" style="font-size:1rem;">Email (optional)</label>
+                <input type="email" class="form-control" id="reviewEmail" style="font-size:1rem;">
               </div>
               <div class="mb-3">
-                <label class="form-label fw-semibold">Rating</label>
-                <select class="form-select" id="reviewRating">
+                <label class="form-label fw-semibold" style="font-size:1rem;">Rating</label>
+                <select class="form-select" id="reviewRating" style="font-size:1rem;">
                   <option value="5">⭐⭐⭐⭐⭐ – Excellent</option>
                   <option value="4">⭐⭐⭐⭐ – Very Good</option>
                   <option value="3">⭐⭐⭐ – Good</option>
@@ -166,10 +126,10 @@
                 </select>
               </div>
               <div class="mb-4">
-                <label class="form-label fw-semibold">Your Review *</label>
-                <textarea class="form-control" id="reviewText" rows="4" placeholder="Share your experience with us..." required></textarea>
+                <label class="form-label fw-semibold" style="font-size:1rem;">Your Review *</label>
+                <textarea class="form-control" id="reviewText" rows="4" placeholder="Share your experience with us..." style="font-size:1rem;" required></textarea>
               </div>
-              <button type="submit" class="btn btn-primary w-100" id="reviewSubmitBtn">
+              <button type="submit" class="btn btn-primary w-100 fw-bold" id="reviewSubmitBtn" style="font-size:1.1rem; padding:0.75rem;">
                 <span id="reviewSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>
                 Submit Review
               </button>
