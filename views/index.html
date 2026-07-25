@@ -121,6 +121,66 @@
   </div>
 </section>
 
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TESTIMONIALS / REVIEWS SECTION                                        -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<section class="section bg-light">
+  <div class="container">
+    <div class="text-center mb-5">
+      <div class="section-label">What Our Clients Say</div>
+      <h2 class="section-title">Client Reviews</h2>
+      <p class="section-sub">Real feedback from real clients</p>
+    </div>
+
+    <!-- Reviews Carousel -->
+    <div id="reviewsCarousel" class="reviews-carousel">
+      <div class="reviews-track" id="reviewsTrack">
+        <div class="text-center py-5 text-muted">Loading reviews...</div>
+      </div>
+    </div>
+
+    <!-- Submit Review Form -->
+    <div class="row justify-content-center mt-5">
+      <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-4">
+            <h5 class="fw-bold mb-3">Leave a Review</h5>
+            <div id="reviewAlert" class="alert d-none"></div>
+            <form id="reviewForm">
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Your Name *</label>
+                <input type="text" class="form-control" id="reviewName" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Email (optional)</label>
+                <input type="email" class="form-control" id="reviewEmail">
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Rating</label>
+                <select class="form-select" id="reviewRating">
+                  <option value="5">⭐⭐⭐⭐⭐ – Excellent</option>
+                  <option value="4">⭐⭐⭐⭐ – Very Good</option>
+                  <option value="3">⭐⭐⭐ – Good</option>
+                  <option value="2">⭐⭐ – Fair</option>
+                  <option value="1">⭐ – Poor</option>
+                </select>
+              </div>
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Your Review *</label>
+                <textarea class="form-control" id="reviewText" rows="4" placeholder="Share your experience with us..." required></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary w-100" id="reviewSubmitBtn">
+                <span id="reviewSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>
+                Submit Review
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- Footer -->
 <footer class="bg-dark text-white-50 py-4">
   <div class="container text-center">
@@ -130,5 +190,108 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/js/nav.js"></script>
+
+<script>
+  // ─── LOAD REVIEWS ──────────────────────────────────────────────────────────
+  async function loadReviews() {
+    try {
+      const res = await fetch('/api/reviews/approved');
+      const reviews = await res.json();
+      const track = document.getElementById('reviewsTrack');
+      
+      if (!reviews.length) {
+        track.innerHTML = `
+          <div class="text-center text-muted py-4">
+            <p>No reviews yet. Be the first to leave a review!</p>
+          </div>
+        `;
+        return;
+      }
+      
+      // Duplicate reviews for seamless scrolling
+      const allReviews = [...reviews, ...reviews];
+      
+      track.innerHTML = allReviews.map(review => {
+        const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+        const date = new Date(review.created_at).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+        return `
+          <div class="review-card">
+            <div class="stars">${stars}</div>
+            <div class="review-text">"${escapeHtml(review.review_text)}"</div>
+            <div class="review-author">${escapeHtml(review.client_name)}</div>
+            <div class="review-date">${date}</div>
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error('Error loading reviews:', err);
+      document.getElementById('reviewsTrack').innerHTML = '<div class="text-center text-muted py-4">Unable to load reviews.</div>';
+    }
+  }
+  
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]);
+  }
+  
+  // ─── SUBMIT REVIEW ─────────────────────────────────────────────────────────
+  document.getElementById('reviewForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('reviewName').value.trim();
+    const email = document.getElementById('reviewEmail').value.trim();
+    const rating = parseInt(document.getElementById('reviewRating').value);
+    const text = document.getElementById('reviewText').value.trim();
+    const alertDiv = document.getElementById('reviewAlert');
+    const btn = document.getElementById('reviewSubmitBtn');
+    const spinner = document.getElementById('reviewSpinner');
+    
+    alertDiv.classList.add('d-none');
+    
+    if (!name || !text) {
+      alertDiv.classList.remove('d-none', 'alert-success');
+      alertDiv.classList.add('alert-danger');
+      alertDiv.textContent = 'Please fill in your name and review.';
+      return;
+    }
+    
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+    
+    try {
+      const res = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_name: name, email, rating, review_text: text })
+      });
+      const data = await res.json();
+      
+      if (data.ok) {
+        alertDiv.classList.remove('d-none', 'alert-danger');
+        alertDiv.classList.add('alert-success');
+        alertDiv.textContent = '✅ Review submitted! It will appear once approved.';
+        document.getElementById('reviewForm').reset();
+        document.getElementById('reviewRating').value = '5';
+        loadReviews(); // Refresh the carousel
+      } else {
+        alertDiv.classList.remove('d-none', 'alert-success');
+        alertDiv.classList.add('alert-danger');
+        alertDiv.textContent = data.msg || 'Submission failed.';
+      }
+    } catch (err) {
+      alertDiv.classList.remove('d-none', 'alert-success');
+      alertDiv.classList.add('alert-danger');
+      alertDiv.textContent = 'Network error. Please try again.';
+    } finally {
+      btn.disabled = false;
+      spinner.classList.add('d-none');
+    }
+  });
+  
+  // ─── LOAD REVIEWS ON PAGE LOAD ────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', loadReviews);
+</script>
 </body>
 </html>

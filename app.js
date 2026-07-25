@@ -960,6 +960,87 @@ io.on('connection', (socket) => {
   });
 });
 
+// ─── ROUTES – REVIEWS ──────────────────────────────────────────────────────
+
+// Submit a review (public)
+app.post('/api/reviews', async (req, res) => {
+  const { client_name, email, rating, review_text, order_id } = req.body;
+  
+  if (!client_name || !review_text) {
+    return res.json({ ok: false, msg: 'Name and review are required.' });
+  }
+  
+  try {
+    const result = await query(
+      `INSERT INTO reviews (client_name, email, rating, review_text, order_id, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending')
+       RETURNING id`,
+      [client_name, email || null, rating || 5, review_text, order_id || null]
+    );
+    
+    res.json({ ok: true, msg: 'Review submitted successfully! It will appear once approved.' });
+  } catch (err) {
+    console.error('Review submit error:', err);
+    res.json({ ok: false, msg: 'Database error.' });
+  }
+});
+
+// Get approved reviews (public – for homepage)
+app.get('/api/reviews/approved', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT client_name, rating, review_text, created_at
+       FROM reviews
+       WHERE status = 'approved'
+       ORDER BY created_at DESC
+       LIMIT 20`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.json([]);
+  }
+});
+
+// Admin: Get all reviews
+app.get('/api/admin/reviews', requireLogin, requireAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT r.*, o.title as order_title
+       FROM reviews r
+       LEFT JOIN orders o ON r.order_id = o.id
+       ORDER BY r.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.json([]);
+  }
+});
+
+// Admin: Approve/Reject/Delete review
+app.patch('/api/admin/reviews/:id', requireLogin, requireAdmin, async (req, res) => {
+  const { status } = req.body; // 'approved', 'rejected', 'deleted'
+  const reviewId = req.params.id;
+  
+  if (!['approved', 'rejected', 'deleted'].includes(status)) {
+    return res.json({ ok: false, msg: 'Invalid status.' });
+  }
+  
+  try {
+    if (status === 'deleted') {
+      await query('DELETE FROM reviews WHERE id = $1', [reviewId]);
+      res.json({ ok: true, msg: 'Review deleted.' });
+    } else {
+      await query('UPDATE reviews SET status = $1, updated_at = NOW() WHERE id = $2', [status, reviewId]);
+      res.json({ ok: true, msg: `Review ${status}.` });
+    }
+  } catch (err) {
+    console.error(err);
+    res.json({ ok: false, msg: 'Database error.' });
+  }
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 // START SERVER
 // ════════════════════════════════════════════════════════════════════════════
