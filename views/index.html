@@ -172,21 +172,15 @@
       const allReviews = [...reviews, ...reviews];
       
       track.innerHTML = allReviews.map(review => {
-        const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
-        const date = new Date(review.created_at).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        });
-        return `
-          <div class="review-card">
-            <div class="stars">${stars}</div>
-            <div class="review-text">"${escapeHtml(review.review_text)}"</div>
-            <div class="review-author">${escapeHtml(review.client_name)}</div>
-            <div class="review-date">${date}</div>
-          </div>
-        `;
-      }).join('');
+  const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+  return `
+    <div class="review-card">
+      <div class="stars">${stars}</div>
+      <div class="review-text">"${escapeHtml(review.review_text)}"</div>
+      <div class="review-author">${escapeHtml(review.client_name)}</div>
+    </div>
+  `;
+}).join('');
     } catch (err) {
       console.error('Error loading reviews:', err);
       document.getElementById('reviewsTrack').innerHTML = '<div class="text-center text-muted py-4">Unable to load reviews.</div>';
