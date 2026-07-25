@@ -40,9 +40,8 @@
       <button class="admin-tab active" id="tabOrdersBtn"><i class="bi bi-grid-3x3-gap-fill me-2"></i>Orders</button>
       <button class="admin-tab" id="tabChatBtn"><i class="bi bi-chat-dots-fill me-2"></i>Support Chat</button>
       <button class="admin-tab" id="tabWritersBtn"><i class="bi bi-people-fill me-2"></i>Writers</button>
-      <button class="admin-tab" id="tabFilesBtn"><i class="bi bi-folder-fill me-2"></i>Files</button>
-      <button class="admin-tab" id="tabUsersBtn"><i class="bi bi-person-gear me-2"></i>Manage Users</button>
       <button class="admin-tab" id="tabReviewsBtn"><i class="bi bi-star-fill me-2"></i>Reviews</button>
+      <button class="admin-tab" id="tabUsersBtn"><i class="bi bi-person-gear me-2"></i>Manage Users</button>
     </div>
 
     <!-- Orders Panel -->
@@ -140,15 +139,28 @@
       </div>
     </div>
 
-    <!-- Files Panel (Admin) -->
-    <div id="filesPanel" style="display: none;">
+    <!-- Reviews Panel -->
+    <div id="reviewsPanel" style="display: none;">
       <div class="card">
-        <div class="card-header"><i class="bi bi-folder-fill me-2"></i>All Files by Order</div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-star-fill"></i> Client Reviews</span>
+          <span class="badge bg-light text-dark" id="reviewCount">0 reviews</span>
+        </div>
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table table-hover mb-0">
-              <thead><tr><th>Order #</th><th>File Name</th><th>Uploaded By</th><th>Role</th><th>Description</th><th>Download</th><th>Delete</th></tr></thead>
-              <tbody id="adminFilesTable"><tr><td colspan="7" class="text-center py-4">Loading...</td></tr></tbody>
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Rating</th>
+                  <th>Review</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="adminReviewsTable">
+                <tr><td colspan="5" class="text-center py-4">Loading...</td></tr>
+              </tbody>
             </table>
           </div>
         </div>
@@ -177,33 +189,6 @@
         </div>
       </div>
 
-     <div id="reviewsPanel" style="display: none;">
-  <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span><i class="bi bi-star-fill"></i> Client Reviews</span>
-      <span class="badge bg-light text-dark" id="reviewCount">0 reviews</span>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Client</th>
-              <th>Rating</th>
-              <th>Review</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="adminReviewsTable">
-            <tr><td colspan="5" class="text-center py-4">Loading...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
-
       <div class="card">
         <div class="card-header"><i class="bi bi-people-fill me-2"></i>Existing Users</div>
         <div class="card-body p-0">
@@ -230,20 +215,20 @@
     document.getElementById('ordersPanel').style.display = p === 'orders' ? 'block' : 'none';
     document.getElementById('chatPanel').style.display = p === 'chat' ? 'block' : 'none';
     document.getElementById('writersPanel').style.display = p === 'writers' ? 'block' : 'none';
-    document.getElementById('filesPanel').style.display = p === 'files' ? 'block' : 'none';
+    document.getElementById('reviewsPanel').style.display = p === 'reviews' ? 'block' : 'none';
     document.getElementById('usersPanel').style.display = p === 'users' ? 'block' : 'none';
+
     if (p === 'orders') { document.getElementById('tabOrdersBtn').classList.add('active'); loadOrders(); }
     if (p === 'chat') { document.getElementById('tabChatBtn').classList.add('active'); loadThreads(); }
     if (p === 'writers') { document.getElementById('tabWritersBtn').classList.add('active'); loadApplications(); loadAssignments(); loadOrderSelect(); loadWriterSelect(); }
-    if (p === 'files') { document.getElementById('tabFilesBtn').classList.add('active'); loadAllFiles(); }
-    if (p === 'users') { document.getElementById('tabUsersBtn').classList.add('active'); loadUsers(); }
     if (p === 'reviews') { document.getElementById('tabReviewsBtn').classList.add('active'); loadReviews(); }
+    if (p === 'users') { document.getElementById('tabUsersBtn').classList.add('active'); loadUsers(); }
   }
 
   document.getElementById('tabOrdersBtn').onclick = () => showPanel('orders');
   document.getElementById('tabChatBtn').onclick = () => showPanel('chat');
   document.getElementById('tabWritersBtn').onclick = () => showPanel('writers');
-  document.getElementById('tabFilesBtn').onclick = () => showPanel('files');
+  document.getElementById('tabReviewsBtn').onclick = () => showPanel('reviews');
   document.getElementById('tabUsersBtn').onclick = () => showPanel('users');
 
   // ─── ORDERS ──────────────────────────────────────────────────────────────────
@@ -256,7 +241,7 @@
     tbody.innerHTML = orders.map(o => `
       <tr>
         <td>${o.id}</td>
-        <td><div>${escapeHtml(o.client_name || '?')}</div><small>${escapeHtml(o.client_email || '')}</small></td>
+        <td><div class="fw-semibold">${escapeHtml(o.client_name || '?')}</div><small class="text-muted">${escapeHtml(o.client_email || '')}</small></td>
         <td>${escapeHtml(o.title)}</td>
         <td>${escapeHtml(o.order_type || '—')}</td>
         <td>₦${(o.total_amount || 0).toLocaleString()}</td>
@@ -422,39 +407,60 @@
     btn.disabled = false;
   };
 
-  // ─── FILES (Admin View All Files) ──────────────────────────────────────────
-  async function loadAllFiles() {
-    const res = await fetch('/api/orders');
-    const orders = await res.json();
-    let allFiles = [];
-    for (const order of orders) {
-      const filesRes = await fetch(`/api/orders/${order.id}/files`);
-      const files = await filesRes.json();
-      files.forEach(f => { f.order_title = order.title; f.order_id = order.id; });
-      allFiles = allFiles.concat(files);
+  // ─── REVIEWS ─────────────────────────────────────────────────────────────────
+  async function loadReviews() {
+    try {
+      const res = await fetch('/api/admin/reviews');
+      const reviews = await res.json();
+      const tbody = document.getElementById('adminReviewsTable');
+      
+      if (!reviews.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No reviews yet.</td></tr>';
+        document.getElementById('reviewCount').innerText = '0 reviews';
+        return;
+      }
+      
+      document.getElementById('reviewCount').innerText = reviews.length + ' reviews';
+      
+      tbody.innerHTML = reviews.map(review => {
+        const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
+        return `
+          <tr>
+            <td><div class="fw-semibold">${escapeHtml(review.client_name)}</div><small class="text-muted">${escapeHtml(review.email || '—')}</small></td>
+            <td>${stars}</td>
+            <td><div style="max-width:200px;font-size:0.85rem;">"${escapeHtml(review.review_text)}"</div></td>
+            <td><span class="badge ${review.status === 'approved' ? 'bg-success' : review.status === 'rejected' ? 'bg-danger' : 'bg-warning text-dark'}">${review.status}</span></td>
+            <td>
+              ${review.status === 'pending' ? `
+                <button class="btn btn-sm btn-success review-action-btn" data-id="${review.id}" data-action="approved">Approve</button>
+                <button class="btn btn-sm btn-danger review-action-btn" data-id="${review.id}" data-action="rejected">Reject</button>
+              ` : `
+                <button class="btn btn-sm btn-outline-danger review-action-btn" data-id="${review.id}" data-action="deleted">Delete</button>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
+      
+      document.querySelectorAll('.review-action-btn').forEach(btn => {
+        btn.onclick = async () => {
+          const reviewId = btn.dataset.id;
+          const action = btn.dataset.action;
+          if (action === 'deleted' && !confirm('Delete this review?')) return;
+          
+          const res = await fetch(`/api/admin/reviews/${reviewId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: action })
+          });
+          if (res.ok) loadReviews();
+          else alert('Action failed');
+        };
+      });
+    } catch (err) {
+      console.error(err);
+      document.getElementById('adminReviewsTable').innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading reviews</td></tr>';
     }
-    const tbody = document.getElementById('adminFilesTable');
-    if (!allFiles.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">No files uploaded yet.</td></tr>'; return; }
-    tbody.innerHTML = allFiles.map(file => `
-      <tr>
-        <td>#${file.order_id} - ${escapeHtml(file.order_title)}</td>
-        <td>${escapeHtml(file.file_name)}</td>
-        <td>${escapeHtml(file.uploader_name)}</td>
-        <td><span class="badge bg-secondary">${file.uploader_role}</span></td>
-        <td>${file.description ? escapeHtml(file.description) : '—'}</td>
-        <td><a href="/api/files/${file.id}/download" class="btn btn-sm btn-outline-primary" target="_blank"><i class="bi bi-download"></i></a></td>
-        <td><button class="btn btn-sm btn-outline-danger delete-file-admin" data-file-id="${file.id}"><i class="bi bi-trash3"></i></button></td>
-      </tr>
-    `).join();
-    document.querySelectorAll('.delete-file-admin').forEach(btn => {
-      btn.onclick = async () => {
-        if(confirm('Delete this file?')) {
-          const res = await fetch(`/api/files/${btn.dataset.fileId}`, { method: 'DELETE' });
-          if(res.ok) loadAllFiles();
-          else alert('Delete failed');
-        }
-      };
-    });
   }
 
   // ─── USERS ────────────────────────────────────────────────────────────────────
@@ -508,63 +514,6 @@
     }
     btn.disabled = false;
   };
-
-// ─── REVIEWS MANAGEMENT ────────────────────────────────────────────────────
-async function loadReviews() {
-  try {
-    const res = await fetch('/api/admin/reviews');
-    const reviews = await res.json();
-    const tbody = document.getElementById('adminReviewsTable');
-    
-    if (!reviews.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No reviews yet.</td></tr>';
-      document.getElementById('reviewCount').innerText = '0 reviews';
-      return;
-    }
-    
-    document.getElementById('reviewCount').innerText = reviews.length + ' reviews';
-    
-    tbody.innerHTML = reviews.map(review => {
-      const stars = '★'.repeat(review.rating) + '☆'.repeat(5 - review.rating);
-      return `
-        <tr>
-          <td><div class="fw-semibold">${escapeHtml(review.client_name)}</div><small class="text-muted">${escapeHtml(review.email || '—')}</small></td>
-          <td>${stars}</td>
-          <td><div style="max-width:200px;font-size:0.85rem;">"${escapeHtml(review.review_text)}"</div></td>
-          <td><span class="badge ${review.status === 'approved' ? 'bg-success' : review.status === 'rejected' ? 'bg-danger' : 'bg-warning text-dark'}">${review.status}</span></td>
-          <td>
-            ${review.status === 'pending' ? `
-              <button class="btn btn-sm btn-success review-action-btn" data-id="${review.id}" data-action="approved">Approve</button>
-              <button class="btn btn-sm btn-danger review-action-btn" data-id="${review.id}" data-action="rejected">Reject</button>
-            ` : `
-              <button class="btn btn-sm btn-outline-danger review-action-btn" data-id="${review.id}" data-action="deleted">Delete</button>
-            `}
-          </td>
-        </tr>
-      `;
-    }).join('');
-    
-    // Attach action events
-    document.querySelectorAll('.review-action-btn').forEach(btn => {
-      btn.onclick = async () => {
-        const reviewId = btn.dataset.id;
-        const action = btn.dataset.action;
-        if (action === 'deleted' && !confirm('Delete this review?')) return;
-        
-        const res = await fetch(`/api/admin/reviews/${reviewId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: action })
-        });
-        if (res.ok) loadReviews();
-        else alert('Action failed');
-      };
-    });
-  } catch (err) {
-    console.error(err);
-    document.getElementById('adminReviewsTable').innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading reviews</td></tr>';
-  }
-}
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────────
   function escapeHtml(str) { if (!str) return ''; return String(str).replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]); }
