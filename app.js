@@ -13,6 +13,9 @@ const axios       = require('axios');
 const multer      = require('multer');
 const fs          = require('fs');
 
+// ─── ADMIN NOTIFICATION EMAIL ──────────────────────────────────────────────
+const ADMIN_EMAIL = 'customerservice@dbramglobal.com'; // Change to your email
+
 // ─── SUPABASE POSTGRESQL ─────────────────────────────────────────────────────
 const { Pool } = require('pg');
 
@@ -241,6 +244,50 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
 
+app.post('/api/register', async (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) return res.json({ ok: false, msg: 'All fields are required.' });
+  
+  const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+  if (existing.rows.length > 0) return res.json({ ok: false, msg: 'Email already registered.' });
+  
+  const hash = bcrypt.hashSync(password, 10);
+  const result = await query('INSERT INTO users (name,email,password) VALUES ($1,$2,$3) RETURNING id', [name, email, hash]);
+  const userId = result.rows[0].id;
+  
+  req.session.userId = userId;
+  req.session.name   = name;
+  req.session.email  = email;
+  req.session.role   = 'client';
+
+  // ─── SEND WELCOME EMAIL TO CLIENT ──────────────────────────────────────
+  (async () => {
+    await sendEmail(
+      email,
+      'Welcome to DBRAM Research',
+      `<h2>Hello ${name},</h2>
+       <p>Thank you for registering with DBRAM Research.</p>
+       <p>You can now <a href="${process.env.APP_BASE_URL}/login">log in</a> and start placing orders.</p>
+       <p>Best regards,<br>DBRAM Research Team</p>`
+    );
+  })();
+
+  // ─── SEND NOTIFICATION TO ADMIN ────────────────────────────────────────
+  (async () => {
+    await sendEmail(
+      ADMIN_EMAIL,
+      '🔔 New Client Registration',
+      `<h2>New Client Registered</h2>
+       <p><strong>Name:</strong> ${name}</p>
+       <p><strong>Email:</strong> ${email}</p>
+       <p><strong>Registered:</strong> ${new Date().toLocaleString()}</p>
+       <br>
+       <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
+    );
+  })();
+
+  res.json({ ok: true });
+});
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTES – DASHBOARD
 // ════════════════════════════════════════════════════════════════════════════
@@ -354,6 +401,45 @@ app.get('/api/me', requireLogin, (req, res) => {
   res.json({ id: req.session.userId, name: req.session.name, email: req.session.email, role: req.session.role });
 });
 
+app.post('/api/orders', requireLogin, async (req, res) => {
+  const { title, subject, orderType, deadline, pages, description } = req.body;
+  if (!title || !subject || !orderType || !deadline || !pages) return res.json({ ok: false, msg: 'All required fields must be filled.' });
+  
+  const totalAmount = PRICE_MAP[orderType];
+  if (!totalAmount) return res.json({ ok: false, msg: 'Invalid order type' });
+  
+  const result = await query(`
+    INSERT INTO orders (user_id, title, subject, order_type, deadline, pages, description, total_amount, amount)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id
+  `, [req.session.userId, title, subject, orderType, deadline, pages, description || '', totalAmount, totalAmount]);
+  
+  const orderId = result.rows[0].id;
+
+  // ─── SEND NOTIFICATION TO ADMIN ────────────────────────────────────────
+  (async () => {
+    // Get client info
+    const userResult = await query('SELECT name, email FROM users WHERE id = $1', [req.session.userId]);
+    const user = userResult.rows[0];
+    
+    await sendEmail(
+      ADMIN_EMAIL,
+      '📦 New Order Placed',
+      `<h2>New Order Placed</h2>
+       <p><strong>Order ID:</strong> #${orderId}</p>
+       <p><strong>Client:</strong> ${user.name} (${user.email})</p>
+       <p><strong>Title:</strong> ${title}</p>
+       <p><strong>Subject:</strong> ${subject}</p>
+       <p><strong>Type:</strong> ${orderType}</p>
+       <p><strong>Pages:</strong> ${pages}</p>
+       <p><strong>Deadline:</strong> ${deadline}</p>
+       <p><strong>Amount:</strong> ₦${totalAmount.toLocaleString()}</p>
+       <br>
+       <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
+    );
+  })();
+
+  res.json({ ok: true, orderId, totalAmount });
+});
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTES – PAYMENTS
 // ════════════════════════════════════════════════════════════════════════════
