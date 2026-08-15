@@ -20,13 +20,16 @@
     return `<a class="nav-link${active ? ' active' : ''}" href="${href}">${label}</a>`;
   }
 
+  // ─── PUBLIC LINKS (visible to everyone) ─────────────────────
   const publicLinks = `
     ${navLink('/', 'Home')}
     ${navLink('/about', 'About')}
     ${navLink('/contact', 'Contact')}
     ${navLink('/apply', 'Apply as Writer')}
+    ${navLink('/international', '🌍 International')}
   `;
 
+  // ─── AUTH LINKS (change based on login state) ───────────────
   const authLinks = user
     ? `${navLink('/dashboard', 'Dashboard')}
        <a class="nav-link" href="#" id="navLogout">Logout</a>`
@@ -55,6 +58,7 @@
     </nav>
   `;
 
+  // ─── LOGOUT HANDLER ────────────────────────────────────────────
   const logoutBtn = document.getElementById('navLogout');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async (e) => {
