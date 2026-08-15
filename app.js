@@ -34,7 +34,7 @@ async function query(sql, params = []) {
   }
 }
 
-// ─── PRICE MAPPING ──────────────────────────────────────────────────────────
+// ─── PRICE MAPPING (NGN) ──────────────────────────────────────────────────
 const PRICE_MAP = {
   'undergraduate': 60000,
   'masters': 80000,
@@ -175,26 +175,6 @@ async function verifyMonnifyPayment(ref) {
 
 // ─── PAYSTACK HELPERS ──────────────────────────────────────────────────────
 
-async function initializePaystackTransaction({ amount, email, reference, metadata }) {
-  const { data } = await axios.post(
-    'https://api.paystack.co/transaction/initialize',
-    {
-      amount: Math.round(amount * 100),
-      email,
-      reference,
-      callback_url: `${process.env.APP_BASE_URL}/paystack/verify?reference=${reference}`,
-      metadata
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    }
-  );
-  return data.data;
-}
-
 async function verifyPaystackPayment(reference) {
   const { data } = await axios.get(
     `https://api.paystack.co/transaction/verify/${reference}`,
@@ -220,6 +200,7 @@ app.get('/apply',   (_req, res) => res.sendFile(path.join(__dirname, 'views/appl
 app.get('/international', (_req, res) => {
   res.sendFile(path.join(__dirname, 'views/international.html'));
 });
+
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTES – AUTH API
 // ════════════════════════════════════════════════════════════════════════════
@@ -243,7 +224,7 @@ app.post('/api/register', async (req, res) => {
   req.session.name   = name;
   req.session.email  = email;
   req.session.role   = 'client';
-  req.session.currency = currency || 'NGN'; // Store currency in session
+  req.session.currency = currency || 'NGN';
 
   // Send welcome email to client
   (async () => {
@@ -287,6 +268,7 @@ app.post('/api/login', async (req, res) => {
   req.session.email  = user.email;
   req.session.role   = user.role;
   req.session.currency = user.preferred_currency || 'NGN';
+
   let redirect = '/dashboard';
   if (user.role === 'admin') redirect = '/admin';
   else if (user.role === 'writer') redirect = '/writer';
@@ -334,19 +316,15 @@ app.post('/api/price', (req, res) => {
   res.json({ ok: true, price });
 });
 
-
 app.post('/api/orders', requireLogin, async (req, res) => {
   const { title, subject, orderType, deadline, pages, description, currency } = req.body;
   
-  // Validate required fields
   if (!title || !subject || !orderType || !deadline || !pages) {
     return res.json({ ok: false, msg: 'All required fields must be filled.' });
   }
   
-  // Determine currency: from request, session, or default to NGN
   const userCurrency = currency || req.session.currency || 'NGN';
   
-  // Get the price based on currency
   let totalAmount;
   if (userCurrency === 'USD') {
     totalAmount = PRICE_MAP_USD[orderType];
@@ -358,7 +336,6 @@ app.post('/api/orders', requireLogin, async (req, res) => {
     return res.json({ ok: false, msg: 'Invalid order type or currency.' });
   }
   
-  // Insert order with currency and amount
   const result = await query(`
     INSERT INTO orders (user_id, title, subject, order_type, deadline, pages, description, total_amount, amount, currency)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id
@@ -367,7 +344,6 @@ app.post('/api/orders', requireLogin, async (req, res) => {
   const orderId = result.rows[0].id;
   const currencySymbol = userCurrency === 'USD' ? '$' : '₦';
 
-  // Send notification to admin (non-blocking)
   (async () => {
     const userResult = await query('SELECT name, email FROM users WHERE id = $1', [req.session.userId]);
     const user = userResult.rows[0];
@@ -488,20 +464,19 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
   const reference = `DBRAM-${order.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   try {
-    // Determine currency and format amount correctly
     const currency = order.currency || 'NGN';
     let paystackAmount;
     let paystackCurrency;
 
     if (currency === 'USD') {
-      // Paystack expects USD in cents (multiply by 100)
       paystackAmount = Math.round(amountToPay * 100);
       paystackCurrency = 'USD';
     } else {
-      // Paystack expects NGN in kobo (multiply by 100)
       paystackAmount = Math.round(amountToPay * 100);
       paystackCurrency = 'NGN';
     }
+
+    console.log('🔍 Paystack Request:', { amount: paystackAmount, currency: paystackCurrency, email: req.session.email, reference });
 
     const result = await axios.post(
       'https://api.paystack.co/transaction/initialize',
@@ -529,7 +504,6 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
       }
     );
 
-    // Store the payment details
     if (!global.pendingPaystackPayments) global.pendingPaystackPayments = new Map();
     global.pendingPaystackPayments.set(reference, {
       orderId: order.id,
@@ -539,7 +513,10 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
 
     res.json({ ok: true, authorization_url: result.data.data.authorization_url, reference });
   } catch (err) {
-    console.error('Paystack init error:', err?.response?.data || err.message);
+    console.error('❌ Paystack init error:', err?.response?.data || err.message);
+    if (err.response) {
+      console.error('📦 Full error response:', JSON.stringify(err.response.data, null, 2));
+    }
     res.json({ ok: false, msg: 'Payment initialization failed. Please try again.' });
   }
 });
@@ -561,7 +538,6 @@ app.get('/paystack/verify', async (req, res) => {
           const newPaidAmount = order.paid_amount + amountToPay;
           await query('UPDATE orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaidAmount, newStatus, orderId]);
           
-          // Send emails...
           const userResult = await query('SELECT * FROM users WHERE id = $1', [order.user_id]);
           const user = userResult.rows[0];
           if (user && user.email) {
@@ -570,19 +546,18 @@ app.get('/paystack/verify', async (req, res) => {
               'Payment Confirmation – Order #' + order.id,
               `<h2>Payment Received</h2>
                <p>Your payment for order "${order.title}" has been confirmed.</p>
-               <p>Amount paid: ₦${amountToPay.toLocaleString()}</p>
-               <p>Total paid so far: ₦${newPaidAmount.toLocaleString()}</p>
+               <p>Amount paid: ${order.currency === 'USD' ? '$' : '₦'}${amountToPay.toLocaleString()}</p>
+               <p>Total paid so far: ${order.currency === 'USD' ? '$' : '₦'}${newPaidAmount.toLocaleString()}</p>
                <p>We'll begin working on your order shortly.</p>`
             );
           }
-          // Notify admin
           await sendEmail(
             ADMIN_EMAIL,
             '💰 New Payment via Paystack – Order #' + order.id,
             `<h2>Payment Received</h2>
              <p><strong>Order ID:</strong> #${order.id}</p>
              <p><strong>Client:</strong> ${user?.name || 'Unknown'} (${user?.email || 'N/A'})</p>
-             <p><strong>Amount:</strong> ₦${amountToPay.toLocaleString()}</p>
+             <p><strong>Amount:</strong> ${order.currency === 'USD' ? '$' : '₦'}${amountToPay.toLocaleString()}</p>
              <p><strong>Payment Method:</strong> Paystack</p>
              <p><strong>Order Status Updated to:</strong> ${newStatus}</p>
              <br>
@@ -591,11 +566,9 @@ app.get('/paystack/verify', async (req, res) => {
         }
         global.pendingPaystackPayments.delete(reference);
       } else {
-        // Fallback: if no pending data, still try to update using metadata
         const metadata = result.metadata || {};
         const orderId = metadata.order_id;
         if (orderId) {
-          // Update order to paid (assume full)
           await query("UPDATE orders SET status = 'paid' WHERE id = $1", [orderId]);
         }
       }
@@ -610,8 +583,6 @@ app.get('/paystack/verify', async (req, res) => {
   }
 });
 
-
-// Paystack Webhook
 app.post('/webhook/paystack', express.json(), async (req, res) => {
   const event = req.body;
   
@@ -630,7 +601,6 @@ app.post('/webhook/paystack', express.json(), async (req, res) => {
       }
       global.pendingPaystackPayments.delete(reference);
     } else {
-      // fallback: metadata
       const metadata = data.metadata || {};
       const orderId = metadata.order_id;
       if (orderId) {
@@ -640,94 +610,6 @@ app.post('/webhook/paystack', express.json(), async (req, res) => {
   }
   
   res.sendStatus(200);
-});
-
-// ════════════════════════════════════════════════════════════════════════════
-// ROUTES – MONNIFY PAYMENTS (Keep as backup)
-// ════════════════════════════════════════════════════════════════════════════
-
-app.post('/api/pay/:orderId', requireLogin, async (req, res) => {
-  const { percentage } = req.body;
-  const orderResult = await query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [req.params.orderId, req.session.userId]);
-  const order = orderResult.rows[0];
-  if (!order) return res.json({ ok: false, msg: 'Order not found.' });
-
-  let amountToPay = 0, newStatus = order.status;
-  if (percentage === '60') {
-    if (order.paid_amount >= order.total_amount * 0.6) return res.json({ ok: false, msg: 'Already paid 60% or more.' });
-    amountToPay = order.total_amount * 0.6;
-    newStatus = 'partially_paid';
-  } else if (percentage === '100') {
-    const remaining = order.total_amount - order.paid_amount;
-    if (remaining <= 0) return res.json({ ok: false, msg: 'Order already fully paid.' });
-    amountToPay = remaining;
-    newStatus = 'paid';
-  } else {
-    return res.json({ ok: false, msg: 'Invalid payment percentage.' });
-  }
-
-  const ref = `RW-${order.id}-${randomUUID().split('-')[0].toUpperCase()}`;
-  await query('UPDATE orders SET payment_ref = $1 WHERE id = $2', [ref, order.id]);
-
-  try {
-    const txn = await initMonnifyTransaction({
-      amount: amountToPay,
-      ref,
-      email: req.session.email,
-      name: req.session.name,
-      description: `Payment for: ${order.title} (${percentage}%)`
-    });
-    if (!global.pendingPayments) global.pendingPayments = new Map();
-    global.pendingPayments.set(ref, { orderId: order.id, amountToPay, newStatus, userId: req.session.userId });
-    res.json({ ok: true, checkoutUrl: txn.checkoutUrl, ref });
-  } catch (err) {
-    console.error('Monnify init error:', err?.response?.data || err.message);
-    res.json({ ok: false, msg: 'Payment gateway error. Check your Monnify credentials.' });
-  }
-});
-
-app.get('/payment/verify', async (req, res) => {
-  const { ref } = req.query;
-  if (!ref) return res.redirect('/dashboard?payment=failed');
-  try {
-    const txn = await verifyMonnifyPayment(ref);
-    if (txn && txn.paymentStatus === 'PAID') {
-      const pending = global.pendingPayments?.get(ref);
-      if (pending) {
-        const orderResult = await query('SELECT * FROM orders WHERE id = $1', [pending.orderId]);
-        const order = orderResult.rows[0];
-        const newPaidAmount = order.paid_amount + pending.amountToPay;
-        await query('UPDATE orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaidAmount, pending.newStatus, pending.orderId]);
-        global.pendingPayments.delete(ref);
-      } else {
-        await query("UPDATE orders SET status = 'paid' WHERE payment_ref = $1", [ref]);
-      }
-      return res.redirect('/dashboard?payment=success');
-    }
-    res.redirect('/dashboard?payment=failed');
-  } catch (err) {
-    console.error('Verify error:', err?.response?.data || err.message);
-    res.redirect('/dashboard?payment=failed');
-  }
-});
-
-app.post('/webhook/monnify', express.json(), async (req, res) => {
-  const body = req.body;
-  if (body?.eventData?.paymentStatus === 'PAID') {
-    const ref = body.eventData.paymentReference;
-    const pending = global.pendingPayments?.get(ref);
-    if (pending) {
-      const orderResult = await query('SELECT * FROM orders WHERE id = $1', [pending.orderId]);
-      const order = orderResult.rows[0];
-      const newPaidAmount = order.paid_amount + pending.amountToPay;
-      await query('UPDATE orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaidAmount, pending.newStatus, pending.orderId]);
-      global.pendingPayments.delete(ref);
-    } else {
-      await query("UPDATE orders SET status = 'paid' WHERE payment_ref = $1", [ref]);
-    }
-    console.log(`Webhook: order updated for ref ${ref}`);
-  }
-  res.json({ ok: true });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1143,7 +1025,7 @@ app.delete('/api/files/:fileId', requireLogin, requireAdmin, async (req, res) =>
 // ════════════════════════════════════════════════════════════════════════════
 
 app.get('/api/admin/users', requireLogin, requireAdmin, async (req, res) => {
-  const result = await query('SELECT id, name, email, role FROM users ORDER BY role, name');
+  const result = await query('SELECT id, name, email, role, preferred_currency FROM users ORDER BY role, name');
   res.json(result.rows);
 });
 
