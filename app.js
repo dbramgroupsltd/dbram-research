@@ -421,6 +421,7 @@ app.get('/api/me', requireLogin, (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
+  const { percentage } = req.body; // <-- READ PERCENTAGE FROM REQUEST
   const orderResult = await query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [req.params.orderId, req.session.userId]);
   const order = orderResult.rows[0];
   if (!order) return res.json({ ok: false, msg: 'Order not found.' });
@@ -429,8 +430,24 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
     return res.json({ ok: false, msg: 'Order already paid.' });
   }
 
-  const remaining = order.total_amount - order.paid_amount;
-  const amountToPay = remaining > 0 ? remaining : order.total_amount;
+  let amountToPay = 0;
+  let newStatus = order.status;
+
+  if (percentage === 60) {
+    // 60% payment – but only if not already paid 60% or more
+    const sixtyPercent = order.total_amount * 0.6;
+    if (order.paid_amount >= sixtyPercent) {
+      return res.json({ ok: false, msg: 'Already paid 60% or more.' });
+    }
+    amountToPay = sixtyPercent;
+    newStatus = 'partially_paid';
+  } else {
+    // Full payment – pay the remaining amount
+    const remaining = order.total_amount - order.paid_amount;
+    if (remaining <= 0) return res.json({ ok: false, msg: 'Order already fully paid.' });
+    amountToPay = remaining;
+    newStatus = 'paid';
+  }
 
   const reference = `DBRAM-${order.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -442,10 +459,19 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
       metadata: {
         order_id: order.id,
         user_id: req.session.userId,
+        percentage: percentage || 100,
         custom_fields: [
           { display_name: "Order Title", variable_name: "order_title", value: order.title }
         ]
       }
+    });
+
+    // Store the payment details in a temporary store so webhook/verify knows how to update
+    if (!global.pendingPaystackPayments) global.pendingPaystackPayments = new Map();
+    global.pendingPaystackPayments.set(reference, {
+      orderId: order.id,
+      amountToPay,
+      newStatus
     });
 
     res.json({ ok: true, authorization_url: result.authorization_url, reference });
@@ -463,18 +489,16 @@ app.get('/paystack/verify', async (req, res) => {
     const result = await verifyPaystackPayment(reference);
     
     if (result.status === 'success') {
-      const metadata = result.metadata || {};
-      const orderId = metadata.order_id;
-      
-      if (orderId) {
+      const pending = global.pendingPaystackPayments?.get(reference);
+      if (pending) {
+        const { orderId, amountToPay, newStatus } = pending;
         const orderResult = await query('SELECT * FROM orders WHERE id = $1', [orderId]);
         const order = orderResult.rows[0];
         if (order) {
-          const newPaidAmount = order.paid_amount + (result.amount / 100);
-          const newStatus = newPaidAmount >= order.total_amount ? 'paid' : 'partially_paid';
+          const newPaidAmount = order.paid_amount + amountToPay;
           await query('UPDATE orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaidAmount, newStatus, orderId]);
           
-          // Send payment confirmation email to client
+          // Send emails...
           const userResult = await query('SELECT * FROM users WHERE id = $1', [order.user_id]);
           const user = userResult.rows[0];
           if (user && user.email) {
@@ -483,11 +507,11 @@ app.get('/paystack/verify', async (req, res) => {
               'Payment Confirmation – Order #' + order.id,
               `<h2>Payment Received</h2>
                <p>Your payment for order "${order.title}" has been confirmed.</p>
-               <p>Total paid: ₦${newPaidAmount.toLocaleString()}</p>
+               <p>Amount paid: ₦${amountToPay.toLocaleString()}</p>
+               <p>Total paid so far: ₦${newPaidAmount.toLocaleString()}</p>
                <p>We'll begin working on your order shortly.</p>`
             );
           }
-          
           // Notify admin
           await sendEmail(
             ADMIN_EMAIL,
@@ -495,11 +519,21 @@ app.get('/paystack/verify', async (req, res) => {
             `<h2>Payment Received</h2>
              <p><strong>Order ID:</strong> #${order.id}</p>
              <p><strong>Client:</strong> ${user?.name || 'Unknown'} (${user?.email || 'N/A'})</p>
-             <p><strong>Amount:</strong> ₦${(result.amount / 100).toLocaleString()}</p>
+             <p><strong>Amount:</strong> ₦${amountToPay.toLocaleString()}</p>
              <p><strong>Payment Method:</strong> Paystack</p>
+             <p><strong>Order Status Updated to:</strong> ${newStatus}</p>
              <br>
              <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
           );
+        }
+        global.pendingPaystackPayments.delete(reference);
+      } else {
+        // Fallback: if no pending data, still try to update using metadata
+        const metadata = result.metadata || {};
+        const orderId = metadata.order_id;
+        if (orderId) {
+          // Update order to paid (assume full)
+          await query("UPDATE orders SET status = 'paid' WHERE id = $1", [orderId]);
         }
       }
       
@@ -513,6 +547,7 @@ app.get('/paystack/verify', async (req, res) => {
   }
 });
 
+
 // Paystack Webhook
 app.post('/webhook/paystack', express.json(), async (req, res) => {
   const event = req.body;
@@ -520,17 +555,23 @@ app.post('/webhook/paystack', express.json(), async (req, res) => {
   if (event.event === 'charge.success') {
     const data = event.data;
     const reference = data.reference;
-    const metadata = data.metadata || {};
-    const orderId = metadata.order_id;
-    
-    if (orderId) {
+    const pending = global.pendingPaystackPayments?.get(reference);
+    if (pending) {
+      const { orderId, amountToPay, newStatus } = pending;
       const orderResult = await query('SELECT * FROM orders WHERE id = $1', [orderId]);
       const order = orderResult.rows[0];
       if (order && order.status !== 'paid' && order.status !== 'completed') {
-        const newPaidAmount = order.paid_amount + (data.amount / 100);
-        const newStatus = newPaidAmount >= order.total_amount ? 'paid' : 'partially_paid';
+        const newPaidAmount = order.paid_amount + amountToPay;
         await query('UPDATE orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaidAmount, newStatus, orderId]);
-        console.log(`Paystack webhook: Order ${orderId} updated.`);
+        console.log(`Paystack webhook: Order ${orderId} updated to ${newStatus}.`);
+      }
+      global.pendingPaystackPayments.delete(reference);
+    } else {
+      // fallback: metadata
+      const metadata = data.metadata || {};
+      const orderId = metadata.order_id;
+      if (orderId) {
+        await query("UPDATE orders SET status = 'paid' WHERE id = $1", [orderId]);
       }
     }
   }
