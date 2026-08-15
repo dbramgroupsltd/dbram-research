@@ -154,8 +154,7 @@
 if (order.status === 'pending') {
   actionHtml = `
     <button class="btn btn-sm btn-primary pay-paystack-btn me-1" data-id="${order.id}">Pay with Paystack</button>
-    <button class="btn btn-sm btn-outline-success pay-btn me-1" data-id="${order.id}" data-percent="100">Pay Full (Monnify)</button>
-  `;
+     `;
 } else if (order.status === 'partially_paid') {
   const remaining = order.total_amount - order.paid_amount;
   actionHtml = `
