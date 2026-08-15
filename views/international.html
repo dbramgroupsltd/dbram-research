@@ -3,17 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DBRAM Research – International</title>
+  <title>International – DBRAM Research</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="/css/style.css">
   <style>
     .hero-international {
-      background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&auto=format&fit=crop&w=1600&q=80') center/cover no-repeat;
+      background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), 
+                  url('https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&auto=format&fit=crop&w=1600&q=80') center/cover no-repeat;
       min-height: 60vh;
       display: flex;
       align-items: center;
       color: white;
+      text-align: center;
     }
     .price-card {
       transition: transform 0.3s;
@@ -40,25 +42,33 @@
       border-radius: 30px;
       font-size: 0.8rem;
     }
+    .currency-badge {
+      background: #10b981;
+      color: white;
+      padding: 0.2rem 0.8rem;
+      border-radius: 30px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
 <div id="navbar-placeholder"></div>
 
-<!-- Hero -->
-<section class="hero-international text-center">
+<!-- Hero Section -->
+<section class="hero-international">
   <div class="container">
     <span class="badge-international mb-3">🌍 International Clients</span>
     <h1 class="display-4 fw-bold">Global Research Writing Services</h1>
     <p class="lead">Get expert research writing, editing, and consulting – delivered worldwide.</p>
     <div class="mt-4">
-      <a href="/register" class="btn btn-primary btn-lg me-2">Get Started</a>
+      <a href="/register?currency=USD" class="btn btn-primary btn-lg me-2">Get Started</a>
       <a href="/about" class="btn btn-outline-light btn-lg">Learn More</a>
     </div>
   </div>
 </section>
 
-<!-- Pricing -->
+<!-- Pricing Section -->
 <section class="section">
   <div class="container">
     <div class="text-center mb-5">
@@ -68,59 +78,76 @@
     <div class="row g-4 justify-content-center">
       <div class="col-md-4">
         <div class="card price-card h-100 p-4 text-center">
-          <h5>Undergraduate</h5>
-          <div class="price">$70</div>
-          <p class="text-muted small">Research papers, essays, and coursework</p>
+          <h5>Assignment</h5>
+          <div class="price">$75</div>
+          <p class="text-muted small">Short papers, essays, quick assignments</p>
           <ul class="list-unstyled text-start small">
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Original research</li>
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>APA/MLA/Harvard formatting</li>
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Plagiarism check included</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Up to 5 pages</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Plagiarism-free</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>APA/MLA/Harvard</li>
           </ul>
+          <a href="/register?currency=USD" class="btn btn-outline-primary mt-2">Get Started</a>
         </div>
       </div>
       <div class="col-md-4">
         <div class="card price-card h-100 p-4 text-center border-primary">
-          <h5>Masters / PGD</h5>
+          <h5>Term Paper / Article</h5>
           <div class="price">$100</div>
-          <p class="text-muted small">Dissertations, theses, and advanced projects</p>
+          <p class="text-muted small">Research papers, reviews, articles</p>
           <ul class="list-unstyled text-start small">
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>In-depth research</li>
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Literature review included</li>
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>2 revisions included</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Up to 10 pages</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Literature review</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>1 revision included</li>
           </ul>
+          <a href="/register?currency=USD" class="btn btn-outline-primary mt-2">Get Started</a>
         </div>
       </div>
       <div class="col-md-4">
         <div class="card price-card h-100 p-4 text-center">
-          <h5>PhD</h5>
-          <div class="price">$200</div>
-          <p class="text-muted small">Doctoral dissertations and research</p>
+          <h5>Undergraduate Project</h5>
+          <div class="price">$150</div>
+          <p class="text-muted small">Undergraduate research projects</p>
           <ul class="list-unstyled text-start small">
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Full dissertation chapters</li>
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Methodology & analysis</li>
-            <li><i class="bi bi-check-circle-fill text-success me-2"></i>3 revisions included</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Up to 20 pages</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Full research</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>2 revisions included</li>
           </ul>
+          <a href="/register?currency=USD" class="btn btn-outline-primary mt-2">Get Started</a>
         </div>
       </div>
     </div>
     <div class="row g-4 justify-content-center mt-2">
-      <div class="col-md-3">
-        <div class="card price-card h-100 p-3 text-center">
-          <h6>Assignment</h6>
-          <div class="price">$40</div>
+      <div class="col-md-4">
+        <div class="card price-card h-100 p-4 text-center">
+          <h5>Masters / PGD Project</h5>
+          <div class="price">$300</div>
+          <p class="text-muted small">Masters dissertations, PGD projects</p>
+          <ul class="list-unstyled text-start small">
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Up to 35 pages</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>In-depth research</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>2 revisions included</li>
+          </ul>
+          <a href="/register?currency=USD" class="btn btn-outline-primary mt-2">Get Started</a>
         </div>
       </div>
-      <div class="col-md-3">
-        <div class="card price-card h-100 p-3 text-center">
-          <h6>Term Paper</h6>
-          <div class="price">$50</div>
+      <div class="col-md-4">
+        <div class="card price-card h-100 p-4 text-center border-success">
+          <h5>PhD Dissertation</h5>
+          <div class="price">$600</div>
+          <p class="text-muted small">Doctoral dissertations, theses</p>
+          <ul class="list-unstyled text-start small">
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Up to 50 pages+</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>Original research</li>
+            <li><i class="bi bi-check-circle-fill text-success me-2"></i>3 revisions included</li>
+          </ul>
+          <a href="/register?currency=USD" class="btn btn-outline-primary mt-2">Get Started</a>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Why International -->
+<!-- Why Choose International -->
 <section class="section bg-light">
   <div class="container">
     <div class="row align-items-center">
@@ -133,7 +160,7 @@
           <li class="mb-3"><i class="bi bi-check-circle-fill text-primary me-2"></i> <strong>Secure Payment</strong> – Safe and confidential transactions</li>
           <li class="mb-3"><i class="bi bi-check-circle-fill text-primary me-2"></i> <strong>24/7 Support</strong> – Real-time chat with our team</li>
         </ul>
-        <a href="/register" class="btn btn-primary">Get Started Now</a>
+        <a href="/register?currency=USD" class="btn btn-primary">Get Started Now</a>
       </div>
       <div class="col-lg-6">
         <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Global Research" class="img-fluid rounded shadow-sm">
@@ -147,18 +174,30 @@
   <div class="container">
     <h3>Ready to Get Started?</h3>
     <p class="mb-4">Create your account and place your order in minutes.</p>
-    <a href="/register" class="btn btn-light btn-lg">Create Free Account</a>
+    <a href="/register?currency=USD" class="btn btn-light btn-lg">Create Free Account</a>
   </div>
 </section>
 
 <!-- Footer -->
 <footer class="bg-dark text-white-50 py-4">
   <div class="container text-center">
-    <p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Monnify.</p>
+    <p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Paystack.</p>
   </div>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/js/nav.js"></script>
+<script>
+  // Check if currency param is in URL and update registration link
+  const urlParams = new URLSearchParams(window.location.search);
+  const currency = urlParams.get('currency');
+  if (currency) {
+    document.querySelectorAll('a[href*="register"]').forEach(link => {
+      if (!link.href.includes('currency')) {
+        link.href = link.href + (link.href.includes('?') ? '&' : '?') + 'currency=' + currency;
+      }
+    });
+  }
+</script>
 </body>
 </html>

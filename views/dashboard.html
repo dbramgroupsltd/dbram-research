@@ -159,44 +159,48 @@
   }
   async function fetchOrders() { const res = await fetch('/api/orders'); const orders = await res.json(); renderOrders(orders); updateStats(orders); }
   
-  function renderOrders(orders) {
-    const tbody = document.getElementById('ordersTableBody');
-    if (!orders.length) { 
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No orders yet. Create your first order!</td></tr>'; 
-      return; 
+function renderOrders(orders) {
+  const tbody = document.getElementById('ordersTableBody');
+  if (!orders.length) { 
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No orders yet. Create your first order!</td></tr>'; 
+    return; 
+  }
+  
+  tbody.innerHTML = orders.map(order => {
+    let actionHtml = '';
+    if (order.status === 'pending') {
+      actionHtml = `
+        <button class="btn btn-sm btn-primary pay-paystack-btn me-1" data-id="${order.id}">Pay 100%</button>
+        <button class="btn btn-sm btn-outline-warning pay-paystack-60-btn me-1" data-id="${order.id}">Pay 60%</button>
+      `;
+    } else if (order.status === 'partially_paid') {
+      const remaining = order.total_amount - order.paid_amount;
+      const currencySymbol = order.currency === 'USD' ? '$' : '₦';
+      actionHtml = `
+        <button class="btn btn-sm btn-warning pay-paystack-btn" data-id="${order.id}">Pay Remaining (${currencySymbol}${remaining.toLocaleString()})</button>
+      `;
+    } else {
+      actionHtml = '<span class="badge bg-success">Completed</span>';
     }
     
-    tbody.innerHTML = orders.map(order => {
-      let actionHtml = '';
-      if (order.status === 'pending') {
-        actionHtml = `
-          <button class="btn btn-sm btn-primary pay-paystack-btn me-1" data-id="${order.id}">Pay 100%</button>
-          <button class="btn btn-sm btn-outline-warning pay-paystack-60-btn me-1" data-id="${order.id}">Pay 60%</button>
-        `;
-      } else if (order.status === 'partially_paid') {
-        const remaining = order.total_amount - order.paid_amount;
-        actionHtml = `
-          <button class="btn btn-sm btn-warning pay-paystack-btn" data-id="${order.id}">Pay Remaining (₦${remaining.toLocaleString()})</button>
-        `;
-      } else {
-        actionHtml = '<span class="badge bg-success">Completed</span>';
-      }
-      
-      return `<tr>
-        <td class="fw-semibold">${escapeHtml(order.title)}</td>
-        <td>${escapeHtml(order.order_type || '?')}</td>
-        <td>₦${order.total_amount?.toLocaleString() || 0}</td>
-        <td>₦${order.paid_amount?.toLocaleString() || 0}</td>
-        <td><span class="badge status-${order.status}">${order.status}</span></td>
-        <td><button class="btn btn-sm btn-outline-primary view-files-btn" data-order-id="${order.id}"><i class="bi bi-files"></i> Files</button></td>
-        <td>${actionHtml}</td>
-      </tr>`;
-    }).join('');
+    // Determine currency symbol for this order
+    const currencySymbol = order.currency === 'USD' ? '$' : '₦';
     
-    // Attach Paystack events
-    attachPaystackEvents();
-    attachFileViewEvents();
-  }
+    return `<tr>
+      <td class="fw-semibold">${escapeHtml(order.title)}</td>
+      <td>${escapeHtml(order.order_type || '?')}</td>
+      <td>${currencySymbol}${order.total_amount?.toLocaleString() || 0}</td>
+      <td>${currencySymbol}${order.paid_amount?.toLocaleString() || 0}</td>
+      <td><span class="badge status-${order.status}">${order.status}</span></td>
+      <td><button class="btn btn-sm btn-outline-primary view-files-btn" data-order-id="${order.id}"><i class="bi bi-files"></i> Files</button></td>
+      <td>${actionHtml}</td>
+    </tr>`;
+  }).join('');
+  
+  // Attach Paystack events
+  attachPaystackEvents();
+  attachFileViewEvents();
+}  
 
   function attachPaystackEvents() {
     // Full payment (100%)

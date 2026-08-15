@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2100 2970" width="2100" height="2970">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D4AF37" />
+      <stop offset="50%" stop-color="#FFD700" />
+      <stop offset="100%" stop-color="#B8860B" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0B1A30" />
+      <stop offset="100%" stop-color="#162A45" />
+    </linearGradient>
+    <!-- Glowing effect for background cross -->
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F5D76E" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#F5D76E" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="2100" height="2970" fill="url(#bgGrad)" />
+
+  <!-- Subtle background glowing cross/light -->
+  <circle cx="1050" cy="1100" r="800" fill="url(#glow)" />
+  <line x1="1050" y1="300" x2="1050" y2="1900" stroke="#F5D76E" stroke-width="2" stroke-opacity="0.1" />
+  <line x1="250" y1="1100" x2="1850" y2="1100" stroke="#F5D76E" stroke-width="2" stroke-opacity="0.1" />
+
+  <!-- ====== TOP GOLD BANNER (Placeholder for your LTMW Logo) ====== -->
+  <rect x="0" y="0" width="2100" height="480" fill="url(#goldGrad)" />
+  
+  <!-- Decorative lines inside banner -->
+  <rect x="30" y="30" width="2040" height="420" fill="none" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="3" />
+  
+  <!-- Your Logo Text (exactly as provided) -->
+  <text x="1050" y="220" font-family="'Arial Black', Arial, sans-serif" font-size="130" fill="#0B1A30" text-anchor="middle" font-weight="900" letter-spacing="12">LTMW</text>
+  <text x="1050" y="320" font-family="'Times New Roman', Georgia, serif" font-size="42" fill="#0B1A30" text-anchor="middle" font-style="italic" letter-spacing="2">In Him was Life (John 1:4)</text>
+
+  <!-- ====== TITLE SECTION ====== -->
+  <text x="1050" y="680" font-family="'Arial', sans-serif" font-size="58" fill="#F5D76E" text-anchor="middle" font-weight="bold" letter-spacing="3">YEWA FATHER'S BUSINESS</text>
+  <text x="1050" y="760" font-family="'Arial', sans-serif" font-size="62" fill="#F5D76E" text-anchor="middle" font-weight="bold" letter-spacing="5">MINISTERS SUMMIT.</text>
+
+  <!-- Small decorative divider -->
+  <line x1="700" y1="810" x2="1400" y2="810" stroke="#F5D76E" stroke-width="4" stroke-opacity="0.6" />
+
+  <!-- ====== THEME SECTION ====== -->
+  <text x="1050" y="900" font-family="'Arial', sans-serif" font-size="40" fill="#FFFFFF" text-anchor="middle" font-weight="normal" letter-spacing="8">THEME:</text>
+  <text x="1050" y="1070" font-family="'Arial Black', Arial, sans-serif" font-size="110" fill="#FFD700" text-anchor="middle" font-weight="900" letter-spacing="6">THE MINISTER</text>
+  <text x="1050" y="1170" font-family="'Arial Black', Arial, sans-serif" font-size="110" fill="#FFD700" text-anchor="middle" font-weight="900" letter-spacing="6">OF GOD</text>
+
+  <!-- ====== DETAILS CARD ====== -->
+  <rect x="250" y="1350" width="1600" height="700" rx="30" fill="#112240" fill-opacity="0.8" stroke="#F5D76E" stroke-width="4" />
+  
+  <text x="1050" y="1450" font-family="'Arial', sans-serif" font-size="45" fill="#F5D76E" text-anchor="middle" font-weight="bold" letter-spacing="10">DATE</text>
+  <text x="1050" y="1520" font-family="'Arial', sans-serif" font-size="60" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Thurs 17 Sept., 2026</text>
+
+  <text x="1050" y="1640" font-family="'Arial', sans-serif" font-size="45" fill="#F5D76E" text-anchor="middle" font-weight="bold" letter-spacing="10">TIME</text>
+  <text x="1050" y="1710" font-family="'Arial', sans-serif" font-size="60" fill="#FFFFFF" text-anchor="middle" font-weight="bold">9am - 4pm</text>
+
+  <text x="1050" y="1830" font-family="'Arial', sans-serif" font-size="45" fill="#F5D76E" text-anchor="middle" font-weight="bold" letter-spacing="10">VENUE</text>
+  <text x="1050" y="1900" font-family="'Arial', sans-serif" font-size="48" fill="#FFFFFF" text-anchor="middle">Goshem Chapel Int'l, Garden of Solutions,</text>
+  <text x="1050" y="1960" font-family="'Arial', sans-serif" font-size="48" fill="#FFFFFF" text-anchor="middle">Ibooro, Yewa North.</text>
+
+  <!-- ====== FOOTER ====== -->
+  <line x1="300" y1="2250" x2="1800" y2="2250" stroke="#F5D76E" stroke-width="3" stroke-opacity="0.5" />
+  
+  <text x="1050" y="2360" font-family="'Arial', sans-serif" font-size="45" fill="#F5D76E" text-anchor="middle" font-weight="bold" letter-spacing="8">ENQUIRIES</text>
+  <text x="1050" y="2440" font-family="'Arial', sans-serif" font-size="58" fill="#FFFFFF" text-anchor="middle" font-weight="bold">08034682899  |  08037149105</text>
+
+</svg>

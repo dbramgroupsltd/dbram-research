@@ -44,6 +44,16 @@ const PRICE_MAP = {
   'term_paper': 30000
 };
 
+// ─── INTERNATIONAL PRICING (USD) ──────────────────────────────────────────
+const PRICE_MAP_USD = {
+  'assignment': 75,
+  'term_paper': 100,
+  'undergraduate': 150,
+  'masters': 300,
+  'pgd': 300,
+  'phd': 600
+};
+
 // ─── MULTER CONFIGURATION ──────────────────────────────────────────────────
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -207,26 +217,33 @@ app.get('/contact', (_req, res) => res.sendFile(path.join(__dirname, 'views/cont
 app.get('/login',    (_req, res) => res.sendFile(path.join(__dirname, 'views/login.html')));
 app.get('/register', (_req, res) => res.sendFile(path.join(__dirname, 'views/register.html')));
 app.get('/apply',   (_req, res) => res.sendFile(path.join(__dirname, 'views/apply.html')));
-
+app.get('/international', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'views/international.html'));
+});
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTES – AUTH API
 // ════════════════════════════════════════════════════════════════════════════
 
 app.post('/api/register', async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, currency } = req.body;
+  
   if (!name || !email || !password) return res.json({ ok: false, msg: 'All fields are required.' });
   
   const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
   if (existing.rows.length > 0) return res.json({ ok: false, msg: 'Email already registered.' });
   
   const hash = bcrypt.hashSync(password, 10);
-  const result = await query('INSERT INTO users (name,email,password) VALUES ($1,$2,$3) RETURNING id', [name, email, hash]);
+  const result = await query(
+    'INSERT INTO users (name, email, password, preferred_currency) VALUES ($1, $2, $3, $4) RETURNING id',
+    [name, email, hash, currency || 'NGN']
+  );
   const userId = result.rows[0].id;
   
   req.session.userId = userId;
   req.session.name   = name;
   req.session.email  = email;
   req.session.role   = 'client';
+  req.session.currency = currency || 'NGN'; // Store currency in session
 
   // Send welcome email to client
   (async () => {
@@ -248,6 +265,7 @@ app.post('/api/register', async (req, res) => {
       `<h2>New Client Registered</h2>
        <p><strong>Name:</strong> ${name}</p>
        <p><strong>Email:</strong> ${email}</p>
+       <p><strong>Preferred Currency:</strong> ${currency || 'NGN'}</p>
        <p><strong>Registered:</strong> ${new Date().toLocaleString()}</p>
        <br>
        <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
@@ -268,7 +286,7 @@ app.post('/api/login', async (req, res) => {
   req.session.name   = user.name;
   req.session.email  = user.email;
   req.session.role   = user.role;
-
+  req.session.currency = user.preferred_currency || 'NGN';
   let redirect = '/dashboard';
   if (user.role === 'admin') redirect = '/admin';
   else if (user.role === 'writer') redirect = '/writer';
@@ -316,21 +334,40 @@ app.post('/api/price', (req, res) => {
   res.json({ ok: true, price });
 });
 
+
 app.post('/api/orders', requireLogin, async (req, res) => {
-  const { title, subject, orderType, deadline, pages, description } = req.body;
-  if (!title || !subject || !orderType || !deadline || !pages) return res.json({ ok: false, msg: 'All required fields must be filled.' });
+  const { title, subject, orderType, deadline, pages, description, currency } = req.body;
   
-  const totalAmount = PRICE_MAP[orderType];
-  if (!totalAmount) return res.json({ ok: false, msg: 'Invalid order type' });
+  // Validate required fields
+  if (!title || !subject || !orderType || !deadline || !pages) {
+    return res.json({ ok: false, msg: 'All required fields must be filled.' });
+  }
   
+  // Determine currency: from request, session, or default to NGN
+  const userCurrency = currency || req.session.currency || 'NGN';
+  
+  // Get the price based on currency
+  let totalAmount;
+  if (userCurrency === 'USD') {
+    totalAmount = PRICE_MAP_USD[orderType];
+  } else {
+    totalAmount = PRICE_MAP[orderType];
+  }
+  
+  if (!totalAmount) {
+    return res.json({ ok: false, msg: 'Invalid order type or currency.' });
+  }
+  
+  // Insert order with currency and amount
   const result = await query(`
-    INSERT INTO orders (user_id, title, subject, order_type, deadline, pages, description, total_amount, amount)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id
-  `, [req.session.userId, title, subject, orderType, deadline, pages, description || '', totalAmount, totalAmount]);
+    INSERT INTO orders (user_id, title, subject, order_type, deadline, pages, description, total_amount, amount, currency)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id
+  `, [req.session.userId, title, subject, orderType, deadline, pages, description || '', totalAmount, totalAmount, userCurrency]);
   
   const orderId = result.rows[0].id;
+  const currencySymbol = userCurrency === 'USD' ? '$' : '₦';
 
-  // Send notification to admin
+  // Send notification to admin (non-blocking)
   (async () => {
     const userResult = await query('SELECT name, email FROM users WHERE id = $1', [req.session.userId]);
     const user = userResult.rows[0];
@@ -346,13 +383,14 @@ app.post('/api/orders', requireLogin, async (req, res) => {
        <p><strong>Type:</strong> ${orderType}</p>
        <p><strong>Pages:</strong> ${pages}</p>
        <p><strong>Deadline:</strong> ${deadline}</p>
-       <p><strong>Amount:</strong> ₦${totalAmount.toLocaleString()}</p>
+       <p><strong>Amount:</strong> ${currencySymbol}${totalAmount.toLocaleString()}</p>
+       <p><strong>Currency:</strong> ${userCurrency}</p>
        <br>
        <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
     );
   })();
 
-  res.json({ ok: true, orderId, totalAmount });
+  res.json({ ok: true, orderId, totalAmount, currency: userCurrency });
 });
 
 app.get('/api/orders', requireLogin, async (req, res) => {
