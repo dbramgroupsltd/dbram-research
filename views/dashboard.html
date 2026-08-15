@@ -151,13 +151,19 @@
     if (!orders.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No orders yet. Create your first order!</td></tr>'; return; }
     tbody.innerHTML = orders.map(order => {
       let actionHtml = '';
-      if (order.status === 'pending') {
-        actionHtml = `<button class="btn btn-sm btn-primary pay-btn me-1" data-id="${order.id}" data-percent="60">Pay 60%</button>
-                      <button class="btn btn-sm btn-outline-success pay-btn" data-id="${order.id}" data-percent="100">Pay Full</button>`;
-      } else if (order.status === 'partially_paid') {
-        const remaining = order.total_amount - order.paid_amount;
-        actionHtml = `<button class="btn btn-sm btn-warning pay-btn" data-id="${order.id}" data-percent="100">Pay Remaining (₦${remaining.toLocaleString()})</button>`;
-      } else { actionHtml = '<span class="badge bg-success">Completed</span>'; }
+if (order.status === 'pending') {
+  actionHtml = `
+    <button class="btn btn-sm btn-primary pay-paystack-btn me-1" data-id="${order.id}">Pay with Paystack</button>
+    <button class="btn btn-sm btn-outline-success pay-btn me-1" data-id="${order.id}" data-percent="100">Pay Full (Monnify)</button>
+  `;
+} else if (order.status === 'partially_paid') {
+  const remaining = order.total_amount - order.paid_amount;
+  actionHtml = `
+    <button class="btn btn-sm btn-warning pay-btn" data-id="${order.id}" data-percent="100">Pay Remaining (₦${remaining.toLocaleString()})</button>
+  `;
+} else {
+  actionHtml = '<span class="badge bg-success">Completed</span>';
+}
       return `<tr>
         <td class="fw-semibold">${escapeHtml(order.title)}</td>
         <td>${escapeHtml(order.order_type || '?')}</td>
@@ -236,6 +242,35 @@
       }
     }
   });
+
+// ─── PAYSTACK PAYMENT ──────────────────────────────────────────────────────
+document.addEventListener('click', async (e) => {
+  const paystackBtn = e.target.closest('.pay-paystack-btn');
+  if (!paystackBtn) return;
+  
+  const orderId = paystackBtn.dataset.id;
+  paystackBtn.disabled = true;
+  paystackBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  
+  try {
+    const res = await fetch(`/api/paystack/initiate/${orderId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.ok && data.authorization_url) {
+      window.location.href = data.authorization_url;
+    } else {
+      alert(data.msg || 'Payment initiation failed.');
+      paystackBtn.disabled = false;
+      paystackBtn.innerHTML = 'Pay with Paystack';
+    }
+  } catch (err) {
+    alert('Network error.');
+    paystackBtn.disabled = false;
+    paystackBtn.innerHTML = 'Pay with Paystack';
+  }
+});
 
   // ─── FILE MANAGEMENT ─────────────────────────────────────────────────────────
   async function openFileModal(orderId) {
