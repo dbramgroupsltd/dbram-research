@@ -14,7 +14,7 @@ const multer      = require('multer');
 const fs          = require('fs');
 
 // ─── ADMIN NOTIFICATION EMAIL ──────────────────────────────────────────────
-const ADMIN_EMAIL = 'customerservice@dbramglobal.com'; // Change to your email
+const ADMIN_EMAIL = 'customerservice@dbramglobal.com';
 
 // ─── SUPABASE POSTGRESQL ─────────────────────────────────────────────────────
 const { Pool } = require('pg');
@@ -24,7 +24,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Helper function to execute queries
 async function query(sql, params = []) {
   const client = await pool.connect();
   try {
@@ -164,6 +163,40 @@ async function verifyMonnifyPayment(ref) {
   return data.responseBody;
 }
 
+// ─── PAYSTACK HELPERS ──────────────────────────────────────────────────────
+
+async function initializePaystackTransaction({ amount, email, reference, metadata }) {
+  const { data } = await axios.post(
+    'https://api.paystack.co/transaction/initialize',
+    {
+      amount: Math.round(amount * 100),
+      email,
+      reference,
+      callback_url: `${process.env.APP_BASE_URL}/paystack/verify?reference=${reference}`,
+      metadata
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  );
+  return data.data;
+}
+
+async function verifyPaystackPayment(reference) {
+  const { data } = await axios.get(
+    `https://api.paystack.co/transaction/verify/${reference}`,
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+      }
+    }
+  );
+  return data.data;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTES – PUBLIC PAGES
 // ════════════════════════════════════════════════════════════════════════════
@@ -174,18 +207,6 @@ app.get('/contact', (_req, res) => res.sendFile(path.join(__dirname, 'views/cont
 app.get('/login',    (_req, res) => res.sendFile(path.join(__dirname, 'views/login.html')));
 app.get('/register', (_req, res) => res.sendFile(path.join(__dirname, 'views/register.html')));
 app.get('/apply',   (_req, res) => res.sendFile(path.join(__dirname, 'views/apply.html')));
-app.get('/test-email', async (req, res) => {
-  try {
-    await sendEmail(
-      'ayobolaawosika@gmail.com',
-      'Test Email from DBRAM Research',
-      '<p>If you receive this, email is working! 🎉</p>'
-    );
-    res.send('✅ Test email sent! Check your inbox.');
-  } catch (err) {
-    res.send('❌ Email failed: ' + err.message);
-  }
-});
 
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTES – AUTH API
@@ -207,7 +228,7 @@ app.post('/api/register', async (req, res) => {
   req.session.email  = email;
   req.session.role   = 'client';
 
-  // Send welcome email
+  // Send welcome email to client
   (async () => {
     await sendEmail(
       email,
@@ -216,6 +237,20 @@ app.post('/api/register', async (req, res) => {
        <p>Thank you for registering with DBRAM Research.</p>
        <p>You can now <a href="${process.env.APP_BASE_URL}/login">log in</a> and start placing orders.</p>
        <p>Best regards,<br>DBRAM Research Team</p>`
+    );
+  })();
+
+  // Send notification to admin
+  (async () => {
+    await sendEmail(
+      ADMIN_EMAIL,
+      '🔔 New Client Registration',
+      `<h2>New Client Registered</h2>
+       <p><strong>Name:</strong> ${name}</p>
+       <p><strong>Email:</strong> ${email}</p>
+       <p><strong>Registered:</strong> ${new Date().toLocaleString()}</p>
+       <br>
+       <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
     );
   })();
 
@@ -244,50 +279,6 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
 
-app.post('/api/register', async (req, res) => {
-  const { name, email, password } = req.body;
-  if (!name || !email || !password) return res.json({ ok: false, msg: 'All fields are required.' });
-  
-  const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
-  if (existing.rows.length > 0) return res.json({ ok: false, msg: 'Email already registered.' });
-  
-  const hash = bcrypt.hashSync(password, 10);
-  const result = await query('INSERT INTO users (name,email,password) VALUES ($1,$2,$3) RETURNING id', [name, email, hash]);
-  const userId = result.rows[0].id;
-  
-  req.session.userId = userId;
-  req.session.name   = name;
-  req.session.email  = email;
-  req.session.role   = 'client';
-
-  // ─── SEND WELCOME EMAIL TO CLIENT ──────────────────────────────────────
-  (async () => {
-    await sendEmail(
-      email,
-      'Welcome to DBRAM Research',
-      `<h2>Hello ${name},</h2>
-       <p>Thank you for registering with DBRAM Research.</p>
-       <p>You can now <a href="${process.env.APP_BASE_URL}/login">log in</a> and start placing orders.</p>
-       <p>Best regards,<br>DBRAM Research Team</p>`
-    );
-  })();
-
-  // ─── SEND NOTIFICATION TO ADMIN ────────────────────────────────────────
-  (async () => {
-    await sendEmail(
-      ADMIN_EMAIL,
-      '🔔 New Client Registration',
-      `<h2>New Client Registered</h2>
-       <p><strong>Name:</strong> ${name}</p>
-       <p><strong>Email:</strong> ${email}</p>
-       <p><strong>Registered:</strong> ${new Date().toLocaleString()}</p>
-       <br>
-       <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
-    );
-  })();
-
-  res.json({ ok: true });
-});
 // ════════════════════════════════════════════════════════════════════════════
 // ROUTES – DASHBOARD
 // ════════════════════════════════════════════════════════════════════════════
@@ -337,7 +328,31 @@ app.post('/api/orders', requireLogin, async (req, res) => {
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id
   `, [req.session.userId, title, subject, orderType, deadline, pages, description || '', totalAmount, totalAmount]);
   
-  res.json({ ok: true, orderId: result.rows[0].id, totalAmount });
+  const orderId = result.rows[0].id;
+
+  // Send notification to admin
+  (async () => {
+    const userResult = await query('SELECT name, email FROM users WHERE id = $1', [req.session.userId]);
+    const user = userResult.rows[0];
+    
+    await sendEmail(
+      ADMIN_EMAIL,
+      '📦 New Order Placed',
+      `<h2>New Order Placed</h2>
+       <p><strong>Order ID:</strong> #${orderId}</p>
+       <p><strong>Client:</strong> ${user.name} (${user.email})</p>
+       <p><strong>Title:</strong> ${title}</p>
+       <p><strong>Subject:</strong> ${subject}</p>
+       <p><strong>Type:</strong> ${orderType}</p>
+       <p><strong>Pages:</strong> ${pages}</p>
+       <p><strong>Deadline:</strong> ${deadline}</p>
+       <p><strong>Amount:</strong> ₦${totalAmount.toLocaleString()}</p>
+       <br>
+       <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
+    );
+  })();
+
+  res.json({ ok: true, orderId, totalAmount });
 });
 
 app.get('/api/orders', requireLogin, async (req, res) => {
@@ -401,47 +416,130 @@ app.get('/api/me', requireLogin, (req, res) => {
   res.json({ id: req.session.userId, name: req.session.name, email: req.session.email, role: req.session.role });
 });
 
-app.post('/api/orders', requireLogin, async (req, res) => {
-  const { title, subject, orderType, deadline, pages, description } = req.body;
-  if (!title || !subject || !orderType || !deadline || !pages) return res.json({ ok: false, msg: 'All required fields must be filled.' });
-  
-  const totalAmount = PRICE_MAP[orderType];
-  if (!totalAmount) return res.json({ ok: false, msg: 'Invalid order type' });
-  
-  const result = await query(`
-    INSERT INTO orders (user_id, title, subject, order_type, deadline, pages, description, total_amount, amount)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id
-  `, [req.session.userId, title, subject, orderType, deadline, pages, description || '', totalAmount, totalAmount]);
-  
-  const orderId = result.rows[0].id;
-
-  // ─── SEND NOTIFICATION TO ADMIN ────────────────────────────────────────
-  (async () => {
-    // Get client info
-    const userResult = await query('SELECT name, email FROM users WHERE id = $1', [req.session.userId]);
-    const user = userResult.rows[0];
-    
-    await sendEmail(
-      ADMIN_EMAIL,
-      '📦 New Order Placed',
-      `<h2>New Order Placed</h2>
-       <p><strong>Order ID:</strong> #${orderId}</p>
-       <p><strong>Client:</strong> ${user.name} (${user.email})</p>
-       <p><strong>Title:</strong> ${title}</p>
-       <p><strong>Subject:</strong> ${subject}</p>
-       <p><strong>Type:</strong> ${orderType}</p>
-       <p><strong>Pages:</strong> ${pages}</p>
-       <p><strong>Deadline:</strong> ${deadline}</p>
-       <p><strong>Amount:</strong> ₦${totalAmount.toLocaleString()}</p>
-       <br>
-       <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
-    );
-  })();
-
-  res.json({ ok: true, orderId, totalAmount });
-});
 // ════════════════════════════════════════════════════════════════════════════
-// ROUTES – PAYMENTS
+// ROUTES – PAYSTACK PAYMENTS
+// ════════════════════════════════════════════════════════════════════════════
+
+app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
+  const orderResult = await query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [req.params.orderId, req.session.userId]);
+  const order = orderResult.rows[0];
+  if (!order) return res.json({ ok: false, msg: 'Order not found.' });
+  
+  if (order.status === 'paid' || order.status === 'completed') {
+    return res.json({ ok: false, msg: 'Order already paid.' });
+  }
+
+  const remaining = order.total_amount - order.paid_amount;
+  const amountToPay = remaining > 0 ? remaining : order.total_amount;
+
+  const reference = `DBRAM-${order.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+  try {
+    const result = await initializePaystackTransaction({
+      amount: amountToPay,
+      email: req.session.email,
+      reference,
+      metadata: {
+        order_id: order.id,
+        user_id: req.session.userId,
+        custom_fields: [
+          { display_name: "Order Title", variable_name: "order_title", value: order.title }
+        ]
+      }
+    });
+
+    res.json({ ok: true, authorization_url: result.authorization_url, reference });
+  } catch (err) {
+    console.error('Paystack init error:', err?.response?.data || err.message);
+    res.json({ ok: false, msg: 'Payment initialization failed. Please try again.' });
+  }
+});
+
+app.get('/paystack/verify', async (req, res) => {
+  const { reference } = req.query;
+  if (!reference) return res.redirect('/dashboard?payment=failed');
+
+  try {
+    const result = await verifyPaystackPayment(reference);
+    
+    if (result.status === 'success') {
+      const metadata = result.metadata || {};
+      const orderId = metadata.order_id;
+      
+      if (orderId) {
+        const orderResult = await query('SELECT * FROM orders WHERE id = $1', [orderId]);
+        const order = orderResult.rows[0];
+        if (order) {
+          const newPaidAmount = order.paid_amount + (result.amount / 100);
+          const newStatus = newPaidAmount >= order.total_amount ? 'paid' : 'partially_paid';
+          await query('UPDATE orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaidAmount, newStatus, orderId]);
+          
+          // Send payment confirmation email to client
+          const userResult = await query('SELECT * FROM users WHERE id = $1', [order.user_id]);
+          const user = userResult.rows[0];
+          if (user && user.email) {
+            await sendEmail(
+              user.email,
+              'Payment Confirmation – Order #' + order.id,
+              `<h2>Payment Received</h2>
+               <p>Your payment for order "${order.title}" has been confirmed.</p>
+               <p>Total paid: ₦${newPaidAmount.toLocaleString()}</p>
+               <p>We'll begin working on your order shortly.</p>`
+            );
+          }
+          
+          // Notify admin
+          await sendEmail(
+            ADMIN_EMAIL,
+            '💰 New Payment via Paystack – Order #' + order.id,
+            `<h2>Payment Received</h2>
+             <p><strong>Order ID:</strong> #${order.id}</p>
+             <p><strong>Client:</strong> ${user?.name || 'Unknown'} (${user?.email || 'N/A'})</p>
+             <p><strong>Amount:</strong> ₦${(result.amount / 100).toLocaleString()}</p>
+             <p><strong>Payment Method:</strong> Paystack</p>
+             <br>
+             <p><a href="${process.env.APP_BASE_URL}/admin">View in Admin Dashboard</a></p>`
+          );
+        }
+      }
+      
+      return res.redirect('/dashboard?payment=success');
+    }
+    
+    res.redirect('/dashboard?payment=failed');
+  } catch (err) {
+    console.error('Paystack verify error:', err);
+    res.redirect('/dashboard?payment=failed');
+  }
+});
+
+// Paystack Webhook
+app.post('/webhook/paystack', express.json(), async (req, res) => {
+  const event = req.body;
+  
+  if (event.event === 'charge.success') {
+    const data = event.data;
+    const reference = data.reference;
+    const metadata = data.metadata || {};
+    const orderId = metadata.order_id;
+    
+    if (orderId) {
+      const orderResult = await query('SELECT * FROM orders WHERE id = $1', [orderId]);
+      const order = orderResult.rows[0];
+      if (order && order.status !== 'paid' && order.status !== 'completed') {
+        const newPaidAmount = order.paid_amount + (data.amount / 100);
+        const newStatus = newPaidAmount >= order.total_amount ? 'paid' : 'partially_paid';
+        await query('UPDATE orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaidAmount, newStatus, orderId]);
+        console.log(`Paystack webhook: Order ${orderId} updated.`);
+      }
+    }
+  }
+  
+  res.sendStatus(200);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ROUTES – MONNIFY PAYMENTS (Keep as backup)
 // ════════════════════════════════════════════════════════════════════════════
 
 app.post('/api/pay/:orderId', requireLogin, async (req, res) => {
@@ -497,20 +595,6 @@ app.get('/payment/verify', async (req, res) => {
         const newPaidAmount = order.paid_amount + pending.amountToPay;
         await query('UPDATE orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaidAmount, pending.newStatus, pending.orderId]);
         global.pendingPayments.delete(ref);
-        
-        // Send payment confirmation email
-        const userResult = await query('SELECT * FROM users WHERE id = $1', [order.user_id]);
-        const user = userResult.rows[0];
-        if (user && user.email) {
-          await sendEmail(
-            user.email,
-            'Payment Confirmation – Order #' + order.id,
-            `<h2>Payment Received</h2>
-             <p>Your payment for order "${order.title}" has been confirmed.</p>
-             <p>Total paid: ₦${order.total_amount}</p>
-             <p>We'll begin working on your order shortly.</p>`
-          );
-        }
       } else {
         await query("UPDATE orders SET status = 'paid' WHERE payment_ref = $1", [ref]);
       }
@@ -799,8 +883,9 @@ app.get('/api/admin/assignments', requireLogin, requireAdmin, async (req, res) =
   res.json(result.rows);
 });
 
-app.get('/api/admin/download/:assignmentId', requireLogin, requireAdmin, (req, res) => {
-  const assignment = db.prepare('SELECT file_path, file_name FROM writer_assignments WHERE id = ?').get(req.params.assignmentId);
+app.get('/api/admin/download/:assignmentId', requireLogin, requireAdmin, async (req, res) => {
+  const assignmentResult = await query('SELECT file_path, file_name FROM writer_assignments WHERE id = $1', [req.params.assignmentId]);
+  const assignment = assignmentResult.rows[0];
   if (!assignment || !assignment.file_path) {
     return res.status(404).json({ error: 'File not found.' });
   }
@@ -1021,6 +1106,85 @@ app.delete('/api/me', requireLogin, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// ROUTES – REVIEWS
+// ════════════════════════════════════════════════════════════════════════════
+
+app.post('/api/reviews', async (req, res) => {
+  const { client_name, email, rating, review_text, order_id } = req.body;
+  
+  if (!client_name || !review_text) {
+    return res.json({ ok: false, msg: 'Name and review are required.' });
+  }
+  
+  try {
+    const result = await query(
+      `INSERT INTO reviews (client_name, email, rating, review_text, order_id, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending')
+       RETURNING id`,
+      [client_name, email || null, rating || 5, review_text, order_id || null]
+    );
+    
+    res.json({ ok: true, msg: 'Review submitted successfully! It will appear once approved.' });
+  } catch (err) {
+    console.error('Review submit error:', err);
+    res.json({ ok: false, msg: 'Database error.' });
+  }
+});
+
+app.get('/api/reviews/approved', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT client_name, rating, review_text, created_at
+       FROM reviews
+       WHERE status = 'approved'
+       ORDER BY created_at DESC
+       LIMIT 20`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.json([]);
+  }
+});
+
+app.get('/api/admin/reviews', requireLogin, requireAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT r.*, o.title as order_title
+       FROM reviews r
+       LEFT JOIN orders o ON r.order_id = o.id
+       ORDER BY r.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.json([]);
+  }
+});
+
+app.patch('/api/admin/reviews/:id', requireLogin, requireAdmin, async (req, res) => {
+  const { status } = req.body;
+  const reviewId = req.params.id;
+  
+  if (!['approved', 'rejected', 'deleted'].includes(status)) {
+    return res.json({ ok: false, msg: 'Invalid status.' });
+  }
+  
+  try {
+    if (status === 'deleted') {
+      await query('DELETE FROM reviews WHERE id = $1', [reviewId]);
+      res.json({ ok: true, msg: 'Review deleted.' });
+    } else {
+      await query('UPDATE reviews SET status = $1, updated_at = NOW() WHERE id = $2', [status, reviewId]);
+      res.json({ ok: true, msg: `Review ${status}.` });
+    }
+  } catch (err) {
+    console.error(err);
+    res.json({ ok: false, msg: 'Database error.' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 // SOCKET.IO – CHAT
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1046,87 +1210,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// ─── ROUTES – REVIEWS ──────────────────────────────────────────────────────
-
-// Submit a review (public)
-app.post('/api/reviews', async (req, res) => {
-  const { client_name, email, rating, review_text, order_id } = req.body;
-  
-  if (!client_name || !review_text) {
-    return res.json({ ok: false, msg: 'Name and review are required.' });
-  }
-  
-  try {
-    const result = await query(
-      `INSERT INTO reviews (client_name, email, rating, review_text, order_id, status)
-       VALUES ($1, $2, $3, $4, $5, 'pending')
-       RETURNING id`,
-      [client_name, email || null, rating || 5, review_text, order_id || null]
-    );
-    
-    res.json({ ok: true, msg: 'Review submitted successfully! It will appear once approved.' });
-  } catch (err) {
-    console.error('Review submit error:', err);
-    res.json({ ok: false, msg: 'Database error.' });
-  }
-});
-
-// Get approved reviews (public – for homepage)
-app.get('/api/reviews/approved', async (req, res) => {
-  try {
-    const result = await query(
-      `SELECT client_name, rating, review_text, created_at
-       FROM reviews
-       WHERE status = 'approved'
-       ORDER BY created_at DESC
-       LIMIT 20`
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.json([]);
-  }
-});
-
-// Admin: Get all reviews
-app.get('/api/admin/reviews', requireLogin, requireAdmin, async (req, res) => {
-  try {
-    const result = await query(
-      `SELECT r.*, o.title as order_title
-       FROM reviews r
-       LEFT JOIN orders o ON r.order_id = o.id
-       ORDER BY r.created_at DESC`
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.json([]);
-  }
-});
-
-// Admin: Approve/Reject/Delete review
-app.patch('/api/admin/reviews/:id', requireLogin, requireAdmin, async (req, res) => {
-  const { status } = req.body; // 'approved', 'rejected', 'deleted'
-  const reviewId = req.params.id;
-  
-  if (!['approved', 'rejected', 'deleted'].includes(status)) {
-    return res.json({ ok: false, msg: 'Invalid status.' });
-  }
-  
-  try {
-    if (status === 'deleted') {
-      await query('DELETE FROM reviews WHERE id = $1', [reviewId]);
-      res.json({ ok: true, msg: 'Review deleted.' });
-    } else {
-      await query('UPDATE reviews SET status = $1, updated_at = NOW() WHERE id = $2', [status, reviewId]);
-      res.json({ ok: true, msg: `Review ${status}.` });
-    }
-  } catch (err) {
-    console.error(err);
-    res.json({ ok: false, msg: 'Database error.' });
-  }
-});
-
 // ════════════════════════════════════════════════════════════════════════════
 // START SERVER
 // ════════════════════════════════════════════════════════════════════════════
@@ -1137,4 +1220,5 @@ server.listen(PORT, () => {
   console.log(`📧  Admin login: admin@example.com / admin123`);
   console.log(`✍️  Writer login: writer@example.com / writer123`);
   console.log(`💬  Support login: support@example.com / support123`);
+  console.log(`💳  Paystack is LIVE!`);
 });
