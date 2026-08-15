@@ -35,9 +35,16 @@
                 <label class="form-label fw-semibold">Email Address</label>
                 <input type="email" class="form-control" id="regEmail" placeholder="you@example.com" required>
               </div>
-              <div class="mb-4">
+              <div class="mb-3">
                 <label class="form-label fw-semibold">Password</label>
-                <input type="password" class="form-control" id="regPassword" placeholder="At least 8 characters" required>
+                <input type="password" class="form-control" id="regPassword" placeholder="At least 6 characters" required>
+              </div>
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Preferred Currency</label>
+                <select class="form-select" id="regCurrency">
+                  <option value="NGN">₦ Naira (Nigeria)</option>
+                  <option value="USD">$ USD (International)</option>
+                </select>
               </div>
               <button type="submit" class="btn btn-primary w-100" id="registerBtn">
                 <span id="registerSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>
@@ -58,13 +65,24 @@
 <!-- Footer -->
 <footer class="bg-dark text-white-50 py-4 mt-5">
   <div class="container text-center">
-    <p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Monnify.</p>
+    <p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Paystack.</p>
   </div>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="/js/nav.js"></script>
 <script>
+  // ─── DETECT CURRENCY FROM URL ──────────────────────────────────────────────
+  const urlParams = new URLSearchParams(window.location.search);
+  const currencyParam = urlParams.get('currency');
+  if (currencyParam) {
+    const currencySelect = document.getElementById('regCurrency');
+    if (currencySelect) {
+      currencySelect.value = currencyParam;
+    }
+  }
+
+  // ─── REGISTRATION FORM SUBMIT ──────────────────────────────────────────────
   const form = document.getElementById('registerForm');
   const alertDiv = document.getElementById('registerAlert');
   const btn = document.getElementById('registerBtn');
@@ -75,6 +93,7 @@
     const name = document.getElementById('regName').value.trim();
     const email = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPassword').value.trim();
+    const currency = document.getElementById('regCurrency').value;
 
     alertDiv.classList.add('d-none');
 
@@ -99,7 +118,7 @@
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
+        body: JSON.stringify({ name, email, password, currency })
       });
       const data = await res.json();
 
