@@ -459,7 +459,7 @@ app.get('/api/me', requireLogin, (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
-  const { percentage } = req.body; // <-- READ PERCENTAGE FROM REQUEST
+  const { percentage } = req.body;
   const orderResult = await query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [req.params.orderId, req.session.userId]);
   const order = orderResult.rows[0];
   if (!order) return res.json({ ok: false, msg: 'Order not found.' });
@@ -472,7 +472,6 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
   let newStatus = order.status;
 
   if (percentage === 60) {
-    // 60% payment – but only if not already paid 60% or more
     const sixtyPercent = order.total_amount * 0.6;
     if (order.paid_amount >= sixtyPercent) {
       return res.json({ ok: false, msg: 'Already paid 60% or more.' });
@@ -480,7 +479,6 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
     amountToPay = sixtyPercent;
     newStatus = 'partially_paid';
   } else {
-    // Full payment – pay the remaining amount
     const remaining = order.total_amount - order.paid_amount;
     if (remaining <= 0) return res.json({ ok: false, msg: 'Order already fully paid.' });
     amountToPay = remaining;
@@ -490,21 +488,48 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
   const reference = `DBRAM-${order.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   try {
-    const result = await initializePaystackTransaction({
-      amount: amountToPay,
-      email: req.session.email,
-      reference,
-      metadata: {
-        order_id: order.id,
-        user_id: req.session.userId,
-        percentage: percentage || 100,
-        custom_fields: [
-          { display_name: "Order Title", variable_name: "order_title", value: order.title }
-        ]
-      }
-    });
+    // Determine currency and format amount correctly
+    const currency = order.currency || 'NGN';
+    let paystackAmount;
+    let paystackCurrency;
 
-    // Store the payment details in a temporary store so webhook/verify knows how to update
+    if (currency === 'USD') {
+      // Paystack expects USD in cents (multiply by 100)
+      paystackAmount = Math.round(amountToPay * 100);
+      paystackCurrency = 'USD';
+    } else {
+      // Paystack expects NGN in kobo (multiply by 100)
+      paystackAmount = Math.round(amountToPay * 100);
+      paystackCurrency = 'NGN';
+    }
+
+    const result = await axios.post(
+      'https://api.paystack.co/transaction/initialize',
+      {
+        amount: paystackAmount,
+        email: req.session.email,
+        reference,
+        currency: paystackCurrency,
+        callback_url: `${process.env.APP_BASE_URL}/paystack/verify?reference=${reference}`,
+        metadata: {
+          order_id: order.id,
+          user_id: req.session.userId,
+          percentage: percentage || 100,
+          currency: currency,
+          custom_fields: [
+            { display_name: "Order Title", variable_name: "order_title", value: order.title }
+          ]
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    // Store the payment details
     if (!global.pendingPaystackPayments) global.pendingPaystackPayments = new Map();
     global.pendingPaystackPayments.set(reference, {
       orderId: order.id,
@@ -512,7 +537,7 @@ app.post('/api/paystack/initiate/:orderId', requireLogin, async (req, res) => {
       newStatus
     });
 
-    res.json({ ok: true, authorization_url: result.authorization_url, reference });
+    res.json({ ok: true, authorization_url: result.data.data.authorization_url, reference });
   } catch (err) {
     console.error('Paystack init error:', err?.response?.data || err.message);
     res.json({ ok: false, msg: 'Payment initialization failed. Please try again.' });
