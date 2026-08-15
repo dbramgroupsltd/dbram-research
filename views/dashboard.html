@@ -86,8 +86,20 @@
           <div class="card-body p-0">
             <div class="table-responsive">
               <table class="table table-hover mb-0">
-                <thead class="table-light"><tr><th>Title</th><th>Type</th><th>Total (₦)</th><th>Paid (₦)</th><th>Status</th><th>Files</th><th>Action</th></tr></thead>
-                <tbody id="ordersTableBody"><tr><td colspan="7" class="text-center py-4 text-muted">Loading orders...</td></tr></tbody>
+                <thead class="table-light">
+                  <tr>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Total (₦)</th>
+                    <th>Paid (₦)</th>
+                    <th>Status</th>
+                    <th>Files</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="ordersTableBody">
+                  <tr><td colspan="7" class="text-center py-4 text-muted">Loading orders...</td></tr>
+                </tbody>
               </table>
             </div>
           </div>
@@ -134,7 +146,7 @@
   </div>
 </div>
 
-<footer class="bg-dark text-white-50 py-4 mt-5"><div class="container text-center"><p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Monnify.</p></div></footer>
+<footer class="bg-dark text-white-50 py-4 mt-5"><div class="container text-center"><p class="mb-0">© 2024 DBRAM Research. All rights reserved. Payments secured by Paystack.</p></div></footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -146,23 +158,30 @@
     try { const res = await fetch('/api/me'); if (res.ok) user = await res.json(); else window.location.href = '/login'; return user; } catch(e) { window.location.href = '/login'; }
   }
   async function fetchOrders() { const res = await fetch('/api/orders'); const orders = await res.json(); renderOrders(orders); updateStats(orders); }
+  
   function renderOrders(orders) {
     const tbody = document.getElementById('ordersTableBody');
-    if (!orders.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No orders yet. Create your first order!</td></tr>'; return; }
+    if (!orders.length) { 
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No orders yet. Create your first order!</td></tr>'; 
+      return; 
+    }
+    
     tbody.innerHTML = orders.map(order => {
       let actionHtml = '';
-if (order.status === 'pending') {
-  actionHtml = `
-    <button class="btn btn-sm btn-primary pay-paystack-btn me-1" data-id="${order.id}">Pay with Paystack</button>
-     `;
-} else if (order.status === 'partially_paid') {
-  const remaining = order.total_amount - order.paid_amount;
-  actionHtml = `
-    <button class="btn btn-sm btn-warning pay-btn" data-id="${order.id}" data-percent="100">Pay Remaining (₦${remaining.toLocaleString()})</button>
-  `;
-} else {
-  actionHtml = '<span class="badge bg-success">Completed</span>';
-}
+      if (order.status === 'pending') {
+        actionHtml = `
+          <button class="btn btn-sm btn-primary pay-paystack-btn me-1" data-id="${order.id}">Pay 100%</button>
+          <button class="btn btn-sm btn-outline-warning pay-paystack-60-btn me-1" data-id="${order.id}">Pay 60%</button>
+        `;
+      } else if (order.status === 'partially_paid') {
+        const remaining = order.total_amount - order.paid_amount;
+        actionHtml = `
+          <button class="btn btn-sm btn-warning pay-paystack-btn" data-id="${order.id}">Pay Remaining (₦${remaining.toLocaleString()})</button>
+        `;
+      } else {
+        actionHtml = '<span class="badge bg-success">Completed</span>';
+      }
+      
       return `<tr>
         <td class="fw-semibold">${escapeHtml(order.title)}</td>
         <td>${escapeHtml(order.order_type || '?')}</td>
@@ -173,29 +192,70 @@ if (order.status === 'pending') {
         <td>${actionHtml}</td>
       </tr>`;
     }).join('');
-    document.querySelectorAll('.pay-btn').forEach(btn => {
+    
+    // Attach Paystack events
+    attachPaystackEvents();
+    attachFileViewEvents();
+  }
+
+  function attachPaystackEvents() {
+    // Full payment (100%)
+    document.querySelectorAll('.pay-paystack-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const orderId = btn.dataset.id, percent = btn.dataset.percent;
-        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-        try {
-          const res = await fetch(`/api/pay/${orderId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ percentage: percent }) });
-          const data = await res.json();
-          if (data.ok && data.checkoutUrl) window.location.href = data.checkoutUrl;
-          else { alert(data.msg || 'Payment initiation failed.'); btn.disabled = false; btn.innerHTML = percent === '60' ? 'Pay 60%' : 'Pay Full'; }
-        } catch(err) { alert('Network error.'); btn.disabled = false; btn.innerHTML = percent === '60' ? 'Pay 60%' : 'Pay Full'; }
+        const orderId = btn.dataset.id;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        await initiatePaystackPayment(orderId, btn);
       });
     });
-    // File view button
+
+    // 60% payment
+    document.querySelectorAll('.pay-paystack-60-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const orderId = btn.dataset.id;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        await initiatePaystackPayment(orderId, btn, 60);
+      });
+    });
+  }
+
+  async function initiatePaystackPayment(orderId, btn, percentage) {
+    try {
+      const payload = percentage ? { percentage } : {};
+      const res = await fetch(`/api/paystack/initiate/${orderId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.ok && data.authorization_url) {
+        window.location.href = data.authorization_url;
+      } else {
+        alert(data.msg || 'Payment initiation failed.');
+        btn.disabled = false;
+        btn.innerHTML = percentage ? 'Pay 60%' : 'Pay 100%';
+      }
+    } catch (err) {
+      alert('Network error.');
+      btn.disabled = false;
+      btn.innerHTML = percentage ? 'Pay 60%' : 'Pay 100%';
+    }
+  }
+
+  function attachFileViewEvents() {
     document.querySelectorAll('.view-files-btn').forEach(btn => {
       btn.addEventListener('click', () => openFileModal(btn.dataset.orderId));
     });
   }
+
   function updateStats(orders) {
     document.getElementById('totalOrders').innerText = orders.length;
     document.getElementById('pendingOrders').innerText = orders.filter(o => o.status === 'pending').length;
     document.getElementById('partialOrders').innerText = orders.filter(o => o.status === 'partially_paid').length;
     document.getElementById('completedOrders').innerText = orders.filter(o => o.status === 'paid' || o.status === 'completed').length;
   }
+
   document.getElementById('orderForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = document.getElementById('orderTitle').value.trim();
@@ -206,25 +266,40 @@ if (order.status === 'pending') {
     const description = document.getElementById('orderDescription').value.trim();
     const alertDiv = document.getElementById('orderAlert');
     alertDiv.classList.add('d-none');
+    
     if (!title || !subject || !orderType || !deadline || !pages) {
       alertDiv.classList.remove('d-none', 'alert-success'); alertDiv.classList.add('alert-danger'); alertDiv.textContent = 'Please fill all required fields.'; return;
     }
+    
     const btn = document.getElementById('submitOrderBtn'); const spinner = document.getElementById('orderSpinner');
     btn.disabled = true; spinner.classList.remove('d-none');
+    
     try {
-      const res = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, subject, orderType, deadline, pages, description }) });
+      const res = await fetch('/api/orders', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ title, subject, orderType, deadline, pages, description }) 
+      });
       const data = await res.json();
       if (data.ok) {
         alertDiv.classList.remove('d-none', 'alert-danger'); alertDiv.classList.add('alert-success'); alertDiv.textContent = 'Order created!';
         document.getElementById('orderForm').reset();
         fetchOrders();
-      } else { alertDiv.classList.remove('d-none', 'alert-success'); alertDiv.classList.add('alert-danger'); alertDiv.textContent = data.msg || 'Failed to create order.'; }
-    } catch(err) { alertDiv.classList.remove('d-none', 'alert-success'); alertDiv.classList.add('alert-danger'); alertDiv.textContent = 'Network error.'; }
-    finally { btn.disabled = false; spinner.classList.add('d-none'); }
+      } else { 
+        alertDiv.classList.remove('d-none', 'alert-success'); alertDiv.classList.add('alert-danger'); alertDiv.textContent = data.msg || 'Failed to create order.'; 
+      }
+    } catch(err) { 
+      alertDiv.classList.remove('d-none', 'alert-success'); alertDiv.classList.add('alert-danger'); alertDiv.textContent = 'Network error.'; 
+    } finally { 
+      btn.disabled = false; spinner.classList.add('d-none'); 
+    }
   });
-  // Logout
-  document.getElementById('logoutBtn').addEventListener('click', async () => { await fetch('/api/logout', { method: 'POST' }); window.location.href = '/'; });
-  // Delete account
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => { 
+    await fetch('/api/logout', { method: 'POST' }); 
+    window.location.href = '/'; 
+  });
+
   document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
     if (confirm('⚠️ WARNING: This will permanently delete your account, all orders, and chat messages. This cannot be undone. Continue?')) {
       try {
@@ -242,35 +317,6 @@ if (order.status === 'pending') {
     }
   });
 
-// ─── PAYSTACK PAYMENT ──────────────────────────────────────────────────────
-document.addEventListener('click', async (e) => {
-  const paystackBtn = e.target.closest('.pay-paystack-btn');
-  if (!paystackBtn) return;
-  
-  const orderId = paystackBtn.dataset.id;
-  paystackBtn.disabled = true;
-  paystackBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-  
-  try {
-    const res = await fetch(`/api/paystack/initiate/${orderId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const data = await res.json();
-    if (data.ok && data.authorization_url) {
-      window.location.href = data.authorization_url;
-    } else {
-      alert(data.msg || 'Payment initiation failed.');
-      paystackBtn.disabled = false;
-      paystackBtn.innerHTML = 'Pay with Paystack';
-    }
-  } catch (err) {
-    alert('Network error.');
-    paystackBtn.disabled = false;
-    paystackBtn.innerHTML = 'Pay with Paystack';
-  }
-});
-
   // ─── FILE MANAGEMENT ─────────────────────────────────────────────────────────
   async function openFileModal(orderId) {
     document.getElementById('fileOrderId').textContent = orderId;
@@ -280,7 +326,6 @@ document.addEventListener('click', async (e) => {
     
     const modal = new bootstrap.Modal(document.getElementById('fileModal'));
     modal.show();
-    
     await loadFiles(orderId);
   }
 
@@ -313,7 +358,6 @@ document.addEventListener('click', async (e) => {
     }
   }
 
-  // File upload form
   document.getElementById('fileUploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const orderId = document.getElementById('uploadOrderId').value;
@@ -345,7 +389,14 @@ document.addEventListener('click', async (e) => {
     }
   });
 
-  function escapeHtml(str) { return String(str).replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
+  function escapeHtml(str) { 
+    return String(str).replace(/[&<>]/g, function(m) { 
+      if (m === '&') return '&amp;'; 
+      if (m === '<') return '&lt;'; 
+      if (m === '>') return '&gt;'; 
+      return m; 
+    }); 
+  }
 
   // ─── CHAT LOGIC ─────────────────────────────────────────────────────────────
   function initChat(userData) {
@@ -363,6 +414,7 @@ document.addEventListener('click', async (e) => {
       }
     });
   }
+
   async function loadChatHistory() {
     try {
       const res = await fetch('/api/chat/messages');
@@ -375,6 +427,7 @@ document.addEventListener('click', async (e) => {
       container.scrollTop = container.scrollHeight;
     } catch(err) { console.error(err); }
   }
+
   function appendMessage(msg, isMine) {
     const container = document.getElementById('chatMessages');
     if (!container) return;
@@ -384,6 +437,7 @@ document.addEventListener('click', async (e) => {
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
   }
+
   function sendChatMessage() {
     const input = document.getElementById('chatInput');
     const body = input?.value.trim();
@@ -391,6 +445,7 @@ document.addEventListener('click', async (e) => {
     chatSocket.emit('send_message', { body, targetUserId: currentUser.id });
     input.value = '';
   }
+
   window.toggleChat = function() {
     const box = document.getElementById('chatBox');
     if (!box) return;
